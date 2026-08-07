@@ -16,6 +16,12 @@
 
 ## 快速开始
 
+### 下载安装包（推荐）
+
+从 [Releases](https://github.com/yunyancuo/todotree/releases) 下载最新 `TodoTree-x.x.x.exe`，双击即用，无需安装 Node.js。
+
+### 从源码运行
+
 ```bash
 git clone https://github.com/yunyancuo/todotree.git
 cd todotree-app

@@ -1,16 +1,33 @@
 {
   "name": "todotree",
   "version": "1.2.0",
-  "description": "交互式 TodoTree 桌面应用 - 读 markdown 待办树，打勾划线，重启自动清理",
+  "description": "暗金半透明桌面待办工具 - 4 分区自动化任务管理",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "build": "electron-builder --win portable"
+  },
+  "build": {
+    "appId": "com.todotree.app",
+    "productName": "TodoTree",
+    "win": {
+      "target": "portable",
+      "icon": "icon.png"
+    },
+    "portable": {
+      "artifactName": "TodoTree-${version}.exe"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**",
+      "node_modules/**",
+      "package.json"
+    ]
   },
   "devDependencies": {
-    "electron": "^33.4.11"
+    "electron": "^33.0.0",
+    "electron-builder": "^26.15.3"
   },
-  "license": "MIT",
-  "allowScripts": {
-    "electron@33.4.11": true
-  }
+  "license": "MIT"
 }
