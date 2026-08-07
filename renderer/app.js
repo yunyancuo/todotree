@@ -176,7 +176,7 @@ function render() {
   document.querySelectorAll('.zone-body').forEach(body => {
     const section = body.closest('.zone-section');
     const zoneId = section?.dataset?.zoneId;
-    if (zoneId && body.style.maxHeight) savedHeights[zoneId] = body.style.maxHeight;
+    if (zoneId && body.style.height) savedHeights[zoneId] = body.style.height;
   });
 
   zonesContainer.innerHTML = '';
@@ -226,7 +226,7 @@ function render() {
     section.appendChild(header);
     section.appendChild(body);
 
-    if (savedHeights[zone.id]) body.style.maxHeight = savedHeights[zone.id];
+    if (savedHeights[zone.id]) body.style.height = savedHeights[zone.id];
 
     if (zone.id !== 'abandoned') {
       const handle = document.createElement('div');
@@ -255,7 +255,7 @@ function setupResizeHandle(handle, body) {
   function onResize(e) {
     const delta = e.clientY - startY;
     const newHeight = Math.max(40, startHeight + delta);
-    body.style.maxHeight = newHeight + 'px';
+    body.style.height = newHeight + 'px';
   }
 
   function onResizeEnd() {
