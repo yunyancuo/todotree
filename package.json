@@ -1,0 +1,16 @@
+{
+  "name": "todotree",
+  "version": "1.0.0",
+  "description": "交互式 TodoTree 桌面应用 - 读 markdown 待办树，打勾划线，重启自动清理",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^33.4.11"
+  },
+  "license": "MIT",
+  "allowScripts": {
+    "electron@33.4.11": true
+  }
+}

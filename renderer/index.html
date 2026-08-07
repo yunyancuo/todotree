@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TodoTree</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <h1 class="title">TodoTree</h1>
+      <button id="pin-btn" class="btn-icon" title="解锁拖动">📌</button>
+      <button id="undo-btn" class="btn-icon" title="撤回" disabled>↩</button>
+      <button id="open-file-btn" class="btn-icon" title="打开文件">📂</button>
+      <button id="collapse-all" class="btn-icon" title="折叠全部">▶</button>
+      <button id="expand-all" class="btn-icon" title="展开全部">▼</button>
+      <button id="close-btn" class="btn-icon btn-close" title="关闭">✕</button>
+    </header>
+
+    <div class="file-path-bar" id="file-path-bar"></div>
+
+    <div class="add-form">
+      <input type="text" id="new-todo-input" placeholder="添加任务...">
+      <input type="date" id="ddl-input" class="ddl-input" title="截止日期">
+      <select id="zone-select">
+        <option value="todo">待完成</option>
+        <option value="done">已完成</option>
+        <option value="goals">目标</option>
+        <option value="abandoned">放弃</option>
+      </select>
+      <select id="parent-select">
+        <option value="">-- 根 --</option>
+      </select>
+      <button id="add-btn" class="btn-add">+</button>
+    </div>
+
+    <div class="zones-container" id="zones-container"></div>
+
+    <footer class="footer">
+      <span id="stats">共 0 项</span>
+    </footer>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
