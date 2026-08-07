@@ -95,7 +95,8 @@ body {
 .zone-section {
   border-bottom: 1px solid rgba(180, 130, 50, 0.1);
   display: flex; flex-direction: column;
-  min-height: 60px;
+  min-height: 34px;
+  flex-shrink: 0;
 }
 
 .zone-header {
@@ -145,7 +146,7 @@ body {
 .tree-node.drag-over { border-top: 2px solid #c9a84c; }
 
 .item-num {
-  font-size: 9px; color: rgba(201, 168, 76, 0.55); width: 16px; text-align: right;
+  font-size: 13px; width: 24px; text-align: right;
   flex-shrink: 0; font-variant-numeric: tabular-nums;
 }
 
@@ -189,11 +190,11 @@ body {
 
 .btn-delete {
   width: 18px; height: 18px; padding: 0; border: none; background: none;
-  color: rgba(220, 80, 80, 0.3); cursor: pointer; font-size: 14px; font-weight: 700;
+  color: rgba(220, 80, 80, 0.5); cursor: pointer; font-size: 14px; font-weight: 700;
   line-height: 18px; text-align: center; flex-shrink: 0; border-radius: 3px;
   transition: color 0.15s, background 0.15s;
 }
-.tree-node:hover .btn-delete { color: rgba(220, 80, 80, 0.65); }
+.tree-node:hover .btn-delete { color: #ff4040; }
 .btn-delete:hover { background: rgba(220, 60, 60, 0.5); color: #ff6060; }
 
 .indent-1 { padding-left: 30px; }
@@ -241,6 +242,32 @@ body {
 .context-menu-item.danger { color: #e06666; }
 .context-menu-item.danger:hover { background: rgba(200, 60, 60, 0.2); }
 .context-menu-separator { height: 1px; background: rgba(180, 130, 50, 0.15); margin: 2px 0; }
+
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 99999;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex; align-items: center; justify-content: center;
+}
+.modal-box {
+  background: rgba(20, 15, 5, 0.97);
+  border: 1px solid rgba(180, 130, 50, 0.4);
+  border-radius: 10px; padding: 16px 20px;
+  min-width: 280px; max-width: 360px;
+}
+.modal-title { font-size: 13px; color: #c9a84c; margin-bottom: 10px; font-weight: 600; }
+.modal-input {
+  width: 100%; padding: 8px 10px;
+  border: 1px solid rgba(180, 130, 50, 0.3); border-radius: 6px;
+  background: rgba(0, 0, 0, 0.5); color: #cdd6f4; font-size: 13px; outline: none;
+  margin-bottom: 12px;
+}
+.modal-input:focus { border-color: #c9a84c; }
+.modal-buttons { display: flex; gap: 8px; justify-content: flex-end; }
+.modal-btn {
+  padding: 6px 16px; border-radius: 6px; border: none; font-size: 12px; cursor: pointer;
+}
+.modal-btn.cancel { background: rgba(180, 130, 50, 0.15); color: #cdd6f4; }
+.modal-btn.confirm { background: #c9a84c; color: #1e1e2e; font-weight: 600; }
 
 #undo-btn { font-size: 15px; padding: 4px 7px; }
 

@@ -1,7 +1,7 @@
 let zones = [
-  { id: 'todo', name: '待完成', order: 0 },
-  { id: 'done', name: '已完成', order: 1 },
-  { id: 'goals', name: '目标', order: 2 },
+  { id: 'goals', name: '目标', order: 0 },
+  { id: 'todo', name: '待完成', order: 1 },
+  { id: 'done', name: '已完成', order: 2 },
   { id: 'abandoned', name: '放弃', order: 3 },
 ];
 
@@ -26,6 +26,7 @@ let moveTimers = {};
 let undoStack = [];
 const MAX_UNDO = 20;
 let undoBtn;
+let persistedHeights = {};
 
 function pushUndo() {
   undoStack.push(JSON.parse(JSON.stringify(treeData)));
@@ -58,12 +59,6 @@ function getDescendantIds(parentId) {
   return ids;
 }
 
-function allDescendantsSatisfy(id, predicate) {
-  const children = getChildren(id);
-  if (children.length === 0) return true;
-  return children.every(c => predicate(c) && allDescendantsSatisfy(c.id, predicate));
-}
-
 function getZoneItems(zoneId) {
   return treeData.filter(i => i.zone === zoneId).sort((a, b) => (a.order || 0) - (b.order || 0));
 }
@@ -80,8 +75,7 @@ function parseMarkdown(text) {
     if (!line.trim()) continue;
 
     if (/^# /.test(line)) {
-      rootId = generateId();
-      items.push({ id: rootId, text: line.replace(/^# /, ''), status: 'pending', zone: 'todo', ddl: null, parentId: null, collapsed: false, order: 0 });
+      rootId = '__root__';
       order = 1;
       continue;
     }
@@ -124,7 +118,7 @@ function parseMarkdown(text) {
     items.push({
       id: generateId(), text: taskText, status, zone: currentZone,
       ddl, parentId, collapsed: false, order: order++, indent,
-      statusChangedAt: null, detachedParentId: null, isCopy: false,
+      statusChangedAt: null, detachedParentId: null, isCopy: false, urgentOriginalOrder: null,
     });
   }
 
@@ -176,7 +170,6 @@ function render() {
   });
 
   zonesContainer.innerHTML = '';
-
   let totalCount = 0;
 
   for (const zone of zones) {
@@ -244,13 +237,12 @@ function render() {
     section.appendChild(body);
 
     if (savedHeights[zone.id]) body.style.height = savedHeights[zone.id];
+    else if (persistedHeights[zone.id]) body.style.height = persistedHeights[zone.id];
 
-    if (zone.id !== 'abandoned') {
-      const handle = document.createElement('div');
-      handle.className = 'zone-resize-handle';
-      setupResizeHandle(handle, body);
-      section.appendChild(handle);
-    }
+    const handle = document.createElement('div');
+    handle.className = 'zone-resize-handle';
+    setupResizeHandle(handle, body, zone.id);
+    section.appendChild(handle);
 
     zonesContainer.appendChild(section);
   }
@@ -269,9 +261,6 @@ function renderZoneItems(zoneId, zoneItems, container) {
     if (item.isCopy) continue;
 
     let displayParentId = item.parentId;
-    if (!displayParentId && item.detachedParentId) {
-      displayParentId = item.detachedParentId;
-    }
 
     if (displayParentId) {
       const parent = treeData.find(i => i.id === displayParentId);
@@ -334,6 +323,8 @@ function renderSingleItem(allZoneItems, item, depth, container) {
   const numSpan = document.createElement('span');
   numSpan.className = 'item-num';
   numSpan.textContent = getSiblingIndex(item);
+  const zoneColors = { goals: '#89b4fa', todo: '#c9a84c', done: 'rgba(180,200,180,0.7)', abandoned: 'rgba(160,160,160,0.55)' };
+  numSpan.style.color = zoneColors[item.zone] || '#c9a84c';
 
   const toggleBtn = document.createElement('button');
   toggleBtn.className = `toggle-btn${hasChildren ? '' : ' empty'}`;
@@ -363,13 +354,13 @@ function renderSingleItem(allZoneItems, item, depth, container) {
   deleteBtn.textContent = '\u00D7';
   deleteBtn.addEventListener('click', e => { e.stopPropagation(); deleteItem(item.id); });
 
+  nodeDiv.appendChild(dot);
   nodeDiv.appendChild(numSpan);
   nodeDiv.appendChild(toggleBtn);
-  nodeDiv.appendChild(dot);
   nodeDiv.appendChild(textSpan);
   if (item.ddl) nodeDiv.appendChild(ddlSpan);
   nodeDiv.appendChild(deleteBtn);
-  nodeDiv.addEventListener('contextmenu', e => { e.preventDefault(); showContextMenu(e, item.id); });
+  nodeDiv.oncontextmenu = e => { e.preventDefault(); e.stopPropagation(); showContextMenu(e, item.id); return false; };
   container.appendChild(nodeDiv);
 
   if (hasChildren && !isCollapsed) {
@@ -386,22 +377,66 @@ function renderItems(allZoneItems, items, depth, container) {
   }
 }
 
-function setupResizeHandle(handle, body) {
-  let startY, startHeight;
+function setupResizeHandle(handle, body, zoneId) {
+  let startY, startHeight, otherBody, otherStartHeight;
+  const zoneIdx = zones.findIndex(z => z.id === zoneId);
+
   handle.addEventListener('mousedown', e => {
     e.preventDefault();
     startY = e.clientY;
     startHeight = body.offsetHeight;
+
+    otherBody = null;
+    otherStartHeight = 0;
+    if (zoneIdx < zones.length - 1) {
+      const nextZoneId = zones[zoneIdx + 1].id;
+      const nextBody = document.querySelector(`.zone-section[data-zone-id="${nextZoneId}"] .zone-body`);
+      if (nextBody) {
+        otherBody = nextBody;
+        otherStartHeight = nextBody.offsetHeight;
+      }
+    }
+
     document.addEventListener('mousemove', onResize);
     document.addEventListener('mouseup', onResizeEnd);
   });
+
   function onResize(e) {
-    body.style.height = Math.max(40, startHeight + e.clientY - startY) + 'px';
+    let delta = e.clientY - startY;
+    let newH = Math.max(40, startHeight + delta);
+    let otherH = otherBody ? Math.max(40, otherStartHeight - delta) : 0;
+
+    if (otherBody && otherH <= 40 && delta > 0) {
+      delta = otherStartHeight - 40;
+      newH = startHeight + delta;
+      otherH = 40;
+    }
+    if (newH <= 40 && delta < 0 && otherBody) {
+      delta = 40 - startHeight;
+      newH = 40;
+      otherH = otherStartHeight - delta;
+    }
+
+    body.style.height = Math.max(40, newH) + 'px';
+    if (otherBody) otherBody.style.height = Math.max(40, otherH) + 'px';
   }
+
   function onResizeEnd() {
     document.removeEventListener('mousemove', onResize);
     document.removeEventListener('mouseup', onResizeEnd);
+    persistZoneHeights();
   }
+}
+
+async function persistZoneHeights() {
+  const heights = {};
+  document.querySelectorAll('.zone-body').forEach(body => {
+    const section = body.closest('.zone-section');
+    const zoneId = section?.dataset?.zoneId;
+    if (zoneId && body.style.height) heights[zoneId] = body.style.height;
+  });
+  persistedHeights = heights;
+  await window.todoAPI.saveZoneHeights(heights);
 }
 
 async function reorderItems(fromId, toId) {
@@ -438,7 +473,15 @@ function getSiblingIndex(item) {
   if (!item) return '';
   const siblings = treeData.filter(i => i.parentId === item.parentId && i.zone === item.zone && !i.isCopy);
   const idx = siblings.indexOf(item);
-  return idx >= 0 ? (idx + 1) : '';
+  if (idx < 0) return '';
+
+  if (!item.parentId) {
+    const cn = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十',
+                '十一', '十二', '十三', '十四', '十五', '十六', '十七', '十八', '十九', '二十',
+                '二十一', '二十二', '二十三', '二十四', '二十五', '二十六', '二十七', '二十八', '二十九', '三十'];
+    return cn[idx] + '、' || (idx + 1);
+  }
+  return idx + 1;
 }
 
 function cycleTooltip(status) {
@@ -454,22 +497,18 @@ async function cycleStatus(id) {
   const idx = STATUS_CYCLE.indexOf(item.status);
   const next = STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length];
 
-  const children = treeData.filter(i => i.parentId === id && !i.detachedParentId);
-  if (children.length > 0 && item.zone === 'todo') {
-    if (next === 'done' && !allDescendantsSatisfy(id, c => c.status === 'done')) {
-      undoStack.pop();
-      return;
-    }
-  }
-
-  if (next === 'abandoned' || next === 'urgent') {
-    cascadeStatus(id, next);
+  if (next === 'pending' || next === 'done' || next === 'abandoned' || next === 'urgent') {
+    cascadeStatus(id, next, true);
   }
 
   const parent = treeData.find(i => i.id === item.parentId);
-  if (next === 'urgent' && parent && item.zone === 'todo') {
-    item.detachedParentId = item.parentId;
-    item.parentId = null;
+  if (next === 'urgent' && item.zone === 'todo') {
+    item.urgentOriginalOrder = item.order;
+    item.order = -Date.now();
+  }
+  if (item.status === 'urgent' && next !== 'urgent') {
+    item.order = item.urgentOriginalOrder || item.order;
+    item.urgentOriginalOrder = null;
   }
 
   item.status = next;
@@ -484,17 +523,21 @@ async function cycleStatus(id) {
   render();
 }
 
-function cascadeStatus(parentId, status) {
+function cascadeStatus(parentId, status, fromParent = false) {
   for (const child of getChildren(parentId)) {
     const c = treeData.find(i => i.id === child.id);
     if (c) {
       c.status = status;
       c.statusChangedAt = Date.now();
       if (status === 'urgent' && c.parentId) {
-        c.detachedParentId = c.parentId;
-        c.parentId = null;
+        c.urgentOriginalOrder = c.order;
+        c.order = -Date.now();
       }
-      cascadeStatus(c.id, status);
+      if (status !== 'urgent' && c.urgentOriginalOrder) {
+        c.order = c.urgentOriginalOrder;
+        c.urgentOriginalOrder = null;
+      }
+      cascadeStatus(c.id, status, false);
     }
   }
 }
@@ -525,7 +568,7 @@ function moveWithParentCopy(id, newZone) {
   const item = treeData.find(i => i.id === id);
   if (!item) return;
 
-  const lookupParentId = item.parentId || item.detachedParentId;
+  const lookupParentId = item.parentId;
 
   if (lookupParentId) {
     const existingCopy = treeData.find(i => i.isCopy && i.originParentId === lookupParentId && i.zone === newZone);
@@ -564,13 +607,9 @@ function cleanupOrphanCopies(originParentId) {
     const copies = treeData.filter(i => i.isCopy && i.originParentId === originParentId && i.zone === zone.id);
     for (const copy of copies) {
       const hasItems = treeData.some(i =>
-        i.zone === zone.id &&
-        !i.isCopy &&
-        (i.parentId === originParentId || i.detachedParentId === originParentId)
+        i.zone === zone.id && !i.isCopy && i.parentId === originParentId
       );
-      if (!hasItems) {
-        treeData = treeData.filter(i => i.id !== copy.id);
-      }
+      if (!hasItems) treeData = treeData.filter(i => i.id !== copy.id);
     }
   }
 }
@@ -628,7 +667,7 @@ async function deleteItem(id) {
   const descendants = getDescendantIds(id);
   const idsToRemove = [id, ...descendants];
 
-  const originParentId = item?.detachedParentId || item?.parentId || item?.originParentId;
+  const originParentId = item?.parentId || item?.originParentId;
 
   for (const rid of idsToRemove) {
     if (moveTimers[rid]) { clearTimeout(moveTimers[rid]); delete moveTimers[rid]; }
@@ -697,7 +736,7 @@ async function changeFile() {
 
 function checkStaleStatuses() {
   for (const item of treeData) {
-    if (item.isCopy) continue;
+    if (item.isCopy || item.parentId) continue;
     if (item.zone === 'todo') {
       if (item.status === 'done') moveWithParentCopy(item.id, 'done');
       else if (item.status === 'abandoned') moveWithParentCopy(item.id, 'abandoned');
@@ -707,6 +746,42 @@ function checkStaleStatuses() {
 }
 
 function handleKeydown(e) { if (e.key === 'Enter') addItem(); }
+
+function showModal(title, defaultValue, callback) {
+  window.todoAPI.setFocusable(true);
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-box">
+      <div class="modal-title">${title}</div>
+      <input class="modal-input" value="${defaultValue || ''}" autofocus>
+      <div class="modal-buttons">
+        <button class="modal-btn cancel">取消</button>
+        <button class="modal-btn confirm">确定</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const input = overlay.querySelector('.modal-input');
+  const confirmBtn = overlay.querySelector('.confirm');
+  const cancelBtn = overlay.querySelector('.cancel');
+
+  const cleanup = () => {
+    overlay.remove();
+    window.todoAPI.setFocusable(false);
+  };
+
+  confirmBtn.addEventListener('click', () => { cleanup(); callback(input.value); });
+  cancelBtn.addEventListener('click', () => { cleanup(); callback(null); });
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) { cleanup(); callback(null); } });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { cleanup(); callback(input.value); }
+    if (e.key === 'Escape') { cleanup(); callback(null); }
+  });
+  setTimeout(() => input.focus(), 50);
+}
 
 function updatePinUI() {
   if (pinned) {
@@ -757,38 +832,74 @@ async function togglePin() { pinned = await window.todoAPI.togglePin(); updatePi
 
 let contextMenu = null;
 let contextMenuTargetId = null;
-function createContextMenu() {
-  const menu = document.createElement('div');
-  menu.className = 'context-menu';
-  menu.innerHTML = `
-    <div class="context-menu-item" data-action="add-ddl">添加/修改 DDL</div>
-    <div class="context-menu-separator"></div>
-    <div class="context-menu-item danger" data-action="delete">删除</div>
-    <div class="context-menu-item danger" data-action="delete-all">删除含子任务</div>
-  `;
-  return menu;
-}
 function showContextMenu(e, id) {
   hideContextMenu();
   contextMenuTargetId = id;
-  contextMenu = createContextMenu();
-  contextMenu.style.left = e.clientX + 'px';
-  contextMenu.style.top = e.clientY + 'px';
-  document.body.appendChild(contextMenu);
-  contextMenu.querySelector('[data-action="delete"]').addEventListener('click', () => { deleteItem(id); hideContextMenu(); });
-  contextMenu.querySelector('[data-action="delete-all"]').addEventListener('click', () => { deleteItem(id); hideContextMenu(); });
-  contextMenu.querySelector('[data-action="add-ddl"]').addEventListener('click', () => {
+
+  const menu = document.createElement('div');
+  menu.className = 'context-menu';
+
+  const addDdl = document.createElement('div');
+  addDdl.className = 'context-menu-item';
+  addDdl.textContent = '添加/修改 DDL';
+  addDdl.onclick = (ev) => {
+    ev.stopPropagation();
+    hideContextMenu();
     const item = treeData.find(i => i.id === id);
     if (!item) return;
-    const current = item.ddl || '';
-    const input = prompt('输入截止日期 (YYYY-MM-DD)：', current);
-    if (input !== null) {
-      const trimmed = input.trim();
-      item.ddl = trimmed || null;
-      saveToFile().then(() => render());
-    }
+    showModal('截止日期 (YYYY-MM-DD)', item.ddl || '', (val) => {
+      if (val !== null) {
+        item.ddl = val.trim() || null;
+        saveToFile().then(() => render());
+      }
+    });
+  };
+
+  const addChild = document.createElement('div');
+  addChild.className = 'context-menu-item';
+  addChild.textContent = '添加子任务';
+  addChild.onclick = (ev) => {
+    ev.stopPropagation();
     hideContextMenu();
-  });
+    const parent = treeData.find(i => i.id === id);
+    if (!parent) return;
+    showModal('子任务名称', '', (val) => {
+      if (val && val.trim()) {
+        const siblings = treeData.filter(i => i.parentId === id && i.zone === parent.zone && !i.isCopy);
+        const maxOrder = siblings.reduce((max, s) => Math.max(max, s.order || 0), 0);
+        treeData.push({
+          id: generateId(), text: val.trim(), status: parent.zone === 'goals' ? 'goal' : 'pending',
+          zone: parent.zone, ddl: null, parentId: id, collapsed: false, order: maxOrder + 1,
+          statusChangedAt: null, detachedParentId: null, isCopy: false, urgentOriginalOrder: null,
+        });
+        saveToFile().then(() => render());
+      }
+    });
+  };
+
+  const sep1 = document.createElement('div');
+  sep1.className = 'context-menu-separator';
+
+  const del = document.createElement('div');
+  del.className = 'context-menu-item danger';
+  del.textContent = '删除';
+  del.onclick = (ev) => { ev.stopPropagation(); deleteItem(id); hideContextMenu(); };
+
+  const delAll = document.createElement('div');
+  delAll.className = 'context-menu-item danger';
+  delAll.textContent = '删除含子任务';
+  delAll.onclick = (ev) => { ev.stopPropagation(); deleteItem(id); hideContextMenu(); };
+
+  menu.appendChild(addDdl);
+  menu.appendChild(addChild);
+  menu.appendChild(sep1);
+  menu.appendChild(del);
+  menu.appendChild(delAll);
+
+  menu.style.left = e.clientX + 'px';
+  menu.style.top = e.clientY + 'px';
+  document.body.appendChild(menu);
+  contextMenu = menu;
 }
 function hideContextMenu() { if (contextMenu) { contextMenu.remove(); contextMenu = null; } contextMenuTargetId = null; }
 document.addEventListener('click', (e) => { if (contextMenu && !contextMenu.contains(e.target)) hideContextMenu(); });
@@ -814,6 +925,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   filePathBar.textContent = result.filePath;
   checkStaleStatuses();
   await saveToFile();
+  persistedHeights = await window.todoAPI.getZoneHeights();
   render();
   updatePinUI();
 

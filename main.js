@@ -127,6 +127,26 @@ ipcMain.handle('get-file-path', () => currentFilePath);
 ipcMain.handle('toggle-pin', () => { isPinned = !isPinned; applyPinState(); return isPinned; });
 ipcMain.handle('close-app', () => app.quit());
 ipcMain.handle('get-work-area', () => screen.getDisplayMatching(mainWindow.getBounds()).workArea);
+ipcMain.handle('set-focusable', (_e, focusable) => { if (mainWindow) mainWindow.setFocusable(focusable); });
+
+ipcMain.handle('get-zone-heights', () => {
+  try {
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      return config.zoneHeights || {};
+    }
+  } catch (_) {}
+  return {};
+});
+
+ipcMain.handle('save-zone-heights', async (_event, heights) => {
+  try {
+    let config = {};
+    if (fs.existsSync(configPath)) config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    config.zoneHeights = heights;
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+  } catch (_) {}
+});
 
 ipcMain.handle('get-auto-start', () => {
   return app.getLoginItemSettings().openAtLogin;
