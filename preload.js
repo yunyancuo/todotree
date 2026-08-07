@@ -10,6 +10,5 @@ contextBridge.exposeInMainWorld('todoAPI', {
   getWorkArea: () => ipcRenderer.invoke('get-work-area'),
   getAutoStart: () => ipcRenderer.invoke('get-auto-start'),
   toggleAutoStart: () => ipcRenderer.invoke('toggle-auto-start'),
-  createDesktopShortcut: () => ipcRenderer.invoke('create-desktop-shortcut'),
   onPinStateChanged: (callback) => ipcRenderer.on('pin-state-changed', (_e, pinned) => callback(pinned)),
 });

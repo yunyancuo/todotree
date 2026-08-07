@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, screen, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -136,23 +136,6 @@ ipcMain.handle('toggle-auto-start', () => {
   const current = app.getLoginItemSettings().openAtLogin;
   app.setLoginItemSettings({ openAtLogin: !current });
   return !current;
-});
-
-ipcMain.handle('create-desktop-shortcut', () => {
-  try {
-    const desktop = path.join(os.homedir(), 'Desktop');
-    const target = process.execPath;
-    const appDir = __dirname;
-    const shortcutPath = path.join(desktop, 'TodoTree.lnk');
-    const psScript = path.join(app.getPath('temp'), 'todotree_shortcut.ps1');
-    const psContent = `$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('${shortcutPath.replace(/'/g, "''")}'); $s.TargetPath = '${target.replace(/'/g, "''")}'; $s.Arguments = '.'; $s.WorkingDirectory = '${appDir.replace(/'/g, "''")}'; $s.Save()`;
-    fs.writeFileSync(psScript, psContent, 'utf-8');
-    require('child_process').execSync(`powershell -ExecutionPolicy Bypass -File "${psScript}"`, { windowsHide: true });
-    try { fs.unlinkSync(psScript); } catch (_) {}
-    return { success: true, path: shortcutPath };
-  } catch (e) {
-    return { success: false, error: e.message };
-  }
 });
 
 app.whenReady().then(() => {

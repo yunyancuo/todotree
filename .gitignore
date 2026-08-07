@@ -1,6 +1,7 @@
 node_modules/
 dist/
 out/
+release/
 *.exe
 .DS_Store
 Thumbs.db
