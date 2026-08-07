@@ -64,15 +64,9 @@ function getDescendantIds(parentId) {
 }
 
 function getZoneItems(zoneId) {
-  let items = treeData.filter(item => item.zone === zoneId);
-  if (zoneId === 'todo') {
-    items.sort((a, b) => {
-      if (a.status === 'urgent' && b.status !== 'urgent') return -1;
-      if (a.status !== 'urgent' && b.status === 'urgent') return 1;
-      return (a.order || 0) - (b.order || 0);
-    });
-  }
-  return items;
+  return treeData
+    .filter(item => item.zone === zoneId)
+    .sort((a, b) => (a.order || 0) - (b.order || 0));
 }
 
 function parseMarkdown(text) {
@@ -178,6 +172,13 @@ async function saveToFile() {
 }
 
 function render() {
+  const savedHeights = {};
+  document.querySelectorAll('.zone-body').forEach(body => {
+    const section = body.closest('.zone-section');
+    const zoneId = section?.dataset?.zoneId;
+    if (zoneId && body.style.maxHeight) savedHeights[zoneId] = body.style.maxHeight;
+  });
+
   zonesContainer.innerHTML = '';
 
   let totalCount = 0;
@@ -189,6 +190,7 @@ function render() {
 
     const section = document.createElement('div');
     section.className = 'zone-section';
+    section.dataset.zoneId = zone.id;
 
     const header = document.createElement('div');
     header.className = 'zone-header';
@@ -223,6 +225,8 @@ function render() {
 
     section.appendChild(header);
     section.appendChild(body);
+
+    if (savedHeights[zone.id]) body.style.maxHeight = savedHeights[zone.id];
 
     if (zone.id !== 'abandoned') {
       const handle = document.createElement('div');
