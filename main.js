@@ -7,17 +7,21 @@ let currentFilePath = path.join(os.homedir(), 'Desktop', 'TODOTREE.md');
 let configPath = path.join(app.getPath('userData'), 'config.json');
 let mainWindow;
 let isPinned = true;
+let windowBounds = { x: undefined, y: undefined, width: 520, height: 740 };
 
 function loadConfig() {
   try {
     if (fs.existsSync(configPath)) {
       const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
       currentFilePath = config.filePath || currentFilePath;
+      if (config.bounds) windowBounds = { ...windowBounds, ...config.bounds };
     }
   } catch (_) {}
 }
 function saveConfig() {
-  try { fs.writeFileSync(configPath, JSON.stringify({ filePath: currentFilePath }, null, 2), 'utf-8'); } catch (_) {}
+  try {
+    fs.writeFileSync(configPath, JSON.stringify({ filePath: currentFilePath, bounds: windowBounds }, null, 2), 'utf-8');
+  } catch (_) {}
 }
 loadConfig();
 
@@ -51,8 +55,10 @@ function applyPinState(sendEvent = true) {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 520,
-    height: 740,
+    x: windowBounds.x,
+    y: windowBounds.y,
+    width: windowBounds.width,
+    height: windowBounds.height,
     minWidth: 420,
     minHeight: 500,
     resizable: true,
@@ -75,6 +81,18 @@ function createWindow() {
     mainWindow.show();
     applyPinState(false);
   });
+
+  let saveBoundsTimer = null;
+  const onBoundsChange = () => {
+    if (saveBoundsTimer) clearTimeout(saveBoundsTimer);
+    saveBoundsTimer = setTimeout(() => {
+      const b = mainWindow.getBounds();
+      windowBounds = { x: b.x, y: b.y, width: b.width, height: b.height };
+      saveConfig();
+    }, 500);
+  };
+  mainWindow.on('resize', onBoundsChange);
+  mainWindow.on('move', onBoundsChange);
 }
 
 ipcMain.handle('load-todo', () => {
