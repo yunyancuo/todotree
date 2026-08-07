@@ -37,10 +37,7 @@ async function undo() {
   if (undoStack.length === 0) return;
   treeData = undoStack.pop();
   if (undoBtn) undoBtn.disabled = undoStack.length === 0;
-  for (const id of Object.keys(moveTimers)) {
-    clearTimeout(moveTimers[id]);
-    delete moveTimers[id];
-  }
+  for (const id of Object.keys(moveTimers)) { clearTimeout(moveTimers[id]); delete moveTimers[id]; }
   await saveToFile();
   render();
 }
@@ -50,9 +47,7 @@ function generateId() {
 }
 
 function getChildren(parentId) {
-  return treeData
-    .filter(item => item.parentId === parentId)
-    .sort((a, b) => (a.order || 0) - (b.order || 0));
+  return treeData.filter(i => i.parentId === parentId && !i.detachedParentId).sort((a, b) => (a.order || 0) - (b.order || 0));
 }
 
 function getDescendantIds(parentId) {
@@ -63,10 +58,14 @@ function getDescendantIds(parentId) {
   return ids;
 }
 
+function allDescendantsSatisfy(id, predicate) {
+  const children = getChildren(id);
+  if (children.length === 0) return true;
+  return children.every(c => predicate(c) && allDescendantsSatisfy(c.id, predicate));
+}
+
 function getZoneItems(zoneId) {
-  return treeData
-    .filter(item => item.zone === zoneId)
-    .sort((a, b) => (a.order || 0) - (b.order || 0));
+  return treeData.filter(i => i.zone === zoneId).sort((a, b) => (a.order || 0) - (b.order || 0));
 }
 
 function parseMarkdown(text) {
@@ -102,10 +101,7 @@ function parseMarkdown(text) {
     let ddl = null;
     let taskText = match[2];
     const ddlMatch = taskText.match(/\s*\|\s*ddl:\s*(\d{4}-\d{2}-\d{2})\s*$/);
-    if (ddlMatch) {
-      ddl = ddlMatch[1];
-      taskText = taskText.replace(/\s*\|\s*ddl:\s*\d{4}-\d{2}-\d{2}\s*$/, '');
-    }
+    if (ddlMatch) { ddl = ddlMatch[1]; taskText = taskText.replace(/\s*\|\s*ddl:\s*\d{4}-\d{2}-\d{2}\s*$/, ''); }
 
     const statusMap = { 'x': 'done', '!': 'urgent', '>': 'goal', '~': 'abandoned', '': 'pending' };
     const status = statusMap[statusChar] || 'pending';
@@ -113,7 +109,6 @@ function parseMarkdown(text) {
     const depth = Math.min(Math.floor(indent / 2), 5);
     let parentId = null;
     if (depth > 0) {
-      const siblingItems = items.filter(i => i.parentId === (depth === 1 ? null : items[items.length - 1]?.parentId));
       if (depth === 1) {
         parentId = items.filter(i => i.zone === currentZone && !i.parentId && i.id !== rootId).pop()?.id || null;
       } else {
@@ -129,7 +124,7 @@ function parseMarkdown(text) {
     items.push({
       id: generateId(), text: taskText, status, zone: currentZone,
       ddl, parentId, collapsed: false, order: order++, indent,
-      statusChangedAt: null,
+      statusChangedAt: null, detachedParentId: null, isCopy: false,
     });
   }
 
@@ -144,10 +139,11 @@ function exportMarkdown() {
     lines.push('');
 
     const zoneItems = getZoneItems(zone.id);
-    const topLevelItems = zoneItems.filter(i => !i.parentId);
+    const topLevelItems = zoneItems.filter(i => !i.parentId && !i.isCopy);
 
     function writeItems(items, depth = 0) {
       for (const item of items) {
+        if (item.isCopy) continue;
         const prefix = '  '.repeat(depth);
         const statusMap = { pending: ' ', done: 'x', urgent: '!', goal: '>', abandoned: '~' };
         const s = statusMap[item.status] || ' ';
@@ -155,7 +151,7 @@ function exportMarkdown() {
         if (item.ddl) text += ` | ddl:${item.ddl}`;
         lines.push(text);
 
-        const children = zoneItems.filter(i => i.parentId === item.id);
+        const children = zoneItems.filter(i => i.parentId === item.id && !i.isCopy);
         if (children.length > 0) writeItems(children, depth + 1);
       }
     }
@@ -185,8 +181,7 @@ function render() {
 
   for (const zone of ZONES) {
     const zoneItems = getZoneItems(zone.id);
-    const topLevel = zoneItems.filter(i => !i.parentId);
-    totalCount += zoneItems.length;
+    totalCount += zoneItems.filter(i => !i.isCopy).length;
 
     const section = document.createElement('div');
     section.className = 'zone-section';
@@ -197,16 +192,13 @@ function render() {
     header.innerHTML = `
       <span class="zone-toggle">▼</span>
       <span class="zone-name">${zone.name}</span>
-      <span class="zone-count">${zoneItems.length} 项</span>
+      <span class="zone-count">${zoneItems.filter(i => !i.isCopy).length} 项</span>
     `;
 
     const clearBtn = document.createElement('button');
     clearBtn.className = 'zone-clear';
     clearBtn.textContent = '清除';
-    clearBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      clearZone(zone.id);
-    });
+    clearBtn.addEventListener('click', e => { e.stopPropagation(); clearZone(zone.id); });
     header.appendChild(clearBtn);
 
     const body = document.createElement('div');
@@ -217,10 +209,10 @@ function render() {
       header.querySelector('.zone-toggle').textContent = body.style.display === 'none' ? '▶' : '▼';
     });
 
-    if (topLevel.length === 0) {
+    if (zoneItems.length === 0) {
       body.innerHTML = '<div class="empty-state">暂无</div>';
     } else {
-      renderItems(zoneItems, topLevel, 0, body);
+      renderZoneItems(zone.id, zoneItems, body);
     }
 
     section.appendChild(header);
@@ -242,6 +234,111 @@ function render() {
   updateParentSelect();
 }
 
+function renderZoneItems(zoneId, zoneItems, container) {
+  const phantomIds = new Set();
+  const phantomMap = {};
+
+  const nonPhantom = [];
+
+  for (const item of zoneItems) {
+    if (item.isCopy) continue;
+
+    let displayParentId = item.parentId;
+    if (!displayParentId && item.detachedParentId) {
+      displayParentId = item.detachedParentId;
+    }
+
+    if (displayParentId) {
+      const parent = treeData.find(i => i.id === displayParentId);
+      if (parent && parent.zone !== zoneId) {
+        const phantomKey = displayParentId;
+        phantomIds.add(item.id);
+        if (!phantomMap[phantomKey]) phantomMap[phantomKey] = { parent, items: [] };
+        phantomMap[phantomKey].items.push(item);
+        continue;
+      }
+    }
+
+    nonPhantom.push(item);
+  }
+
+  const topLevel = nonPhantom.filter(i => !i.parentId);
+
+  renderItems(zoneItems, topLevel, 0, container);
+
+  for (const key of Object.keys(phantomMap)) {
+    const group = phantomMap[key];
+
+    const phantomDiv = document.createElement('div');
+    phantomDiv.className = 'tree-node phantom';
+    phantomDiv.innerHTML = `<span class="phantom-icon">↳</span><span class="phantom-text">${group.parent.text}</span>`;
+    container.appendChild(phantomDiv);
+
+    group.items.sort((a, b) => (a.order || 0) - (b.order || 0));
+    for (const item of group.items) {
+      renderSingleItem(zoneItems, item, 1, container);
+    }
+  }
+}
+
+function renderSingleItem(allZoneItems, item, depth, container) {
+  const hasChildren = allZoneItems.some(c => c.parentId === item.id);
+  const isCollapsed = item.collapsed || false;
+  const indentClass = depth > 5 ? 'indent-5' : `indent-${depth}`;
+
+  const nodeDiv = document.createElement('div');
+  nodeDiv.className = `tree-node ${indentClass}`;
+
+  const toggleBtn = document.createElement('button');
+  toggleBtn.className = `toggle-btn${hasChildren ? '' : ' empty'}`;
+  toggleBtn.textContent = isCollapsed ? '▶' : '▼';
+  toggleBtn.addEventListener('click', e => { e.stopPropagation(); toggleCollapse(item.id); });
+
+  const dot = document.createElement('div');
+  dot.className = `status-dot ${item.status}`;
+  dot.title = cycleTooltip(item.status);
+  dot.addEventListener('click', e => { e.stopPropagation(); cycleStatus(item.id); });
+
+  const textSpan = document.createElement('span');
+  textSpan.className = `node-text ${item.status}`;
+  textSpan.textContent = item.text;
+
+  const ddlSpan = document.createElement('span');
+  if (item.ddl) {
+    ddlSpan.className = 'node-ddl';
+    const due = new Date(item.ddl);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    if (due < today) ddlSpan.classList.add('overdue');
+    ddlSpan.textContent = item.ddl;
+  }
+
+  const deleteBtn = document.createElement('button');
+  deleteBtn.className = 'btn-delete';
+  deleteBtn.textContent = '\u00D7';
+  deleteBtn.addEventListener('click', e => { e.stopPropagation(); deleteItem(item.id); });
+
+  nodeDiv.appendChild(toggleBtn);
+  nodeDiv.appendChild(dot);
+  nodeDiv.appendChild(textSpan);
+  if (item.ddl) nodeDiv.appendChild(ddlSpan);
+  nodeDiv.appendChild(deleteBtn);
+  nodeDiv.addEventListener('contextmenu', e => { e.preventDefault(); showContextMenu(e, item.id); });
+  container.appendChild(nodeDiv);
+
+  if (hasChildren && !isCollapsed) {
+    const children = allZoneItems.filter(c => c.parentId === item.id);
+    for (const child of children) {
+      renderSingleItem(allZoneItems, child, depth + 1, container);
+    }
+  }
+}
+
+function renderItems(allZoneItems, items, depth, container) {
+  for (const item of items) {
+    renderSingleItem(allZoneItems, item, depth, container);
+  }
+}
+
 function setupResizeHandle(handle, body) {
   let startY, startHeight;
   handle.addEventListener('mousedown', e => {
@@ -251,68 +348,12 @@ function setupResizeHandle(handle, body) {
     document.addEventListener('mousemove', onResize);
     document.addEventListener('mouseup', onResizeEnd);
   });
-
   function onResize(e) {
-    const delta = e.clientY - startY;
-    const newHeight = Math.max(40, startHeight + delta);
-    body.style.height = newHeight + 'px';
+    body.style.height = Math.max(40, startHeight + e.clientY - startY) + 'px';
   }
-
   function onResizeEnd() {
     document.removeEventListener('mousemove', onResize);
     document.removeEventListener('mouseup', onResizeEnd);
-  }
-}
-
-function renderItems(allZoneItems, items, depth, container) {
-  for (const item of items) {
-    const hasChildren = allZoneItems.some(c => c.parentId === item.id);
-    const isCollapsed = item.collapsed || false;
-    const indentClass = depth > 5 ? 'indent-5' : `indent-${depth}`;
-
-    const nodeDiv = document.createElement('div');
-    nodeDiv.className = `tree-node ${indentClass}`;
-
-    const toggleBtn = document.createElement('button');
-    toggleBtn.className = `toggle-btn${hasChildren ? '' : ' empty'}`;
-    toggleBtn.textContent = isCollapsed ? '▶' : '▼';
-    toggleBtn.addEventListener('click', e => { e.stopPropagation(); toggleCollapse(item.id); });
-
-    const dot = document.createElement('div');
-    dot.className = `status-dot ${item.status}`;
-    dot.title = cycleTooltip(item.status);
-    dot.addEventListener('click', e => { e.stopPropagation(); cycleStatus(item.id); });
-
-    const textSpan = document.createElement('span');
-    textSpan.className = `node-text ${item.status}`;
-    textSpan.textContent = item.text;
-
-    const ddlSpan = document.createElement('span');
-    if (item.ddl) {
-      ddlSpan.className = 'node-ddl';
-      const due = new Date(item.ddl);
-      const today = new Date(); today.setHours(0, 0, 0, 0);
-      if (due < today) ddlSpan.classList.add('overdue');
-      ddlSpan.textContent = item.ddl;
-    }
-
-    const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'btn-delete';
-    deleteBtn.textContent = '\u00D7';
-    deleteBtn.addEventListener('click', e => { e.stopPropagation(); deleteItem(item.id); });
-
-    nodeDiv.appendChild(toggleBtn);
-    nodeDiv.appendChild(dot);
-    nodeDiv.appendChild(textSpan);
-    if (item.ddl) nodeDiv.appendChild(ddlSpan);
-    nodeDiv.appendChild(deleteBtn);
-    nodeDiv.addEventListener('contextmenu', e => { e.preventDefault(); showContextMenu(e, item.id); });
-    container.appendChild(nodeDiv);
-
-    if (hasChildren && !isCollapsed) {
-      const children = allZoneItems.filter(c => c.parentId === item.id);
-      renderItems(allZoneItems, children, depth + 1, container);
-    }
   }
 }
 
@@ -322,24 +363,56 @@ function cycleTooltip(status) {
 
 async function cycleStatus(id) {
   const item = treeData.find(i => i.id === id);
-  if (!item) return;
-  if (item.zone === 'goals') return;
+  if (!item || item.zone === 'goals' || item.isCopy) return;
 
   pushUndo();
 
   const idx = STATUS_CYCLE.indexOf(item.status);
   const next = STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length];
+
+  const children = treeData.filter(i => i.parentId === id && !i.detachedParentId);
+  if (children.length > 0 && item.zone === 'todo') {
+    if (next === 'done' && !allDescendantsSatisfy(id, c => c.status === 'done')) {
+      undoStack.pop();
+      return;
+    }
+  }
+
+  if (next === 'abandoned' || next === 'urgent') {
+    cascadeStatus(id, next);
+  }
+
+  const parent = treeData.find(i => i.id === item.parentId);
+  if (next === 'urgent' && parent && item.zone === 'todo') {
+    item.detachedParentId = item.parentId;
+    item.parentId = null;
+  }
+
   item.status = next;
   item.statusChangedAt = Date.now();
 
   if (moveTimers[id]) { clearTimeout(moveTimers[id]); delete moveTimers[id]; }
-
   if (next === 'done' || next === 'urgent' || next === 'abandoned') {
     startAutoMove(id);
   }
 
   await saveToFile();
   render();
+}
+
+function cascadeStatus(parentId, status) {
+  for (const child of getChildren(parentId)) {
+    const c = treeData.find(i => i.id === child.id);
+    if (c) {
+      c.status = status;
+      c.statusChangedAt = Date.now();
+      if (status === 'urgent' && c.parentId) {
+        c.detachedParentId = c.parentId;
+        c.parentId = null;
+      }
+      cascadeStatus(c.id, status);
+    }
+  }
 }
 
 function startAutoMove(id) {
@@ -354,9 +427,9 @@ async function processAutoMove(id) {
   if (!item) return;
 
   if (item.status === 'done' && item.zone === 'todo') {
-    moveItemToZone(id, 'done');
+    moveWithParentCopy(id, 'done');
   } else if (item.status === 'abandoned' && item.zone === 'todo') {
-    moveItemToZone(id, 'abandoned');
+    moveWithParentCopy(id, 'abandoned');
   } else if (item.status === 'urgent' && item.zone === 'todo') {
     item.order = -Date.now();
     await saveToFile();
@@ -364,12 +437,65 @@ async function processAutoMove(id) {
   }
 }
 
+function moveWithParentCopy(id, newZone) {
+  const item = treeData.find(i => i.id === id);
+  if (!item) return;
+
+  const lookupParentId = item.parentId || item.detachedParentId;
+
+  if (lookupParentId) {
+    const existingCopy = treeData.find(i => i.isCopy && i.originParentId === lookupParentId && i.zone === newZone);
+    if (!existingCopy) {
+      const parent = treeData.find(i => i.id === lookupParentId);
+      if (parent && parent.zone !== newZone) {
+        treeData.push({
+          id: generateId(), text: parent.text, status: parent.status, zone: newZone,
+          ddl: parent.ddl, parentId: null, collapsed: false, order: Date.now(),
+          statusChangedAt: null, detachedParentId: null, isCopy: true, originParentId: lookupParentId,
+        });
+      }
+    }
+  }
+
+  item.zone = newZone;
+  moveDescendants(item.id, newZone);
+  cleanupOrphanCopies(lookupParentId);
+
+  saveToFile().then(() => render());
+}
+
+function moveDescendants(id, newZone) {
+  for (const child of getChildren(id)) {
+    const c = treeData.find(i => i.id === child.id);
+    if (c) {
+      c.zone = newZone;
+      moveDescendants(c.id, newZone);
+    }
+  }
+}
+
+function cleanupOrphanCopies(originParentId) {
+  if (!originParentId) return;
+  for (const zone of ZONES) {
+    const copies = treeData.filter(i => i.isCopy && i.originParentId === originParentId && i.zone === zone.id);
+    for (const copy of copies) {
+      const hasItems = treeData.some(i =>
+        i.zone === zone.id &&
+        !i.isCopy &&
+        (i.parentId === originParentId || i.detachedParentId === originParentId)
+      );
+      if (!hasItems) {
+        treeData = treeData.filter(i => i.id !== copy.id);
+      }
+    }
+  }
+}
+
 function moveItemToZone(id, newZone) {
   const item = treeData.find(i => i.id === id);
   if (!item) return;
   item.zone = newZone;
-  const siblingIds = getDescendantIds(id);
-  for (const sid of siblingIds) {
+  for (const sid of getDescendantIds(id)) {
     const child = treeData.find(i => i.id === sid);
     if (child) child.zone = newZone;
   }
@@ -391,13 +517,13 @@ async function addItem() {
   const zone = zoneSelect.value || 'todo';
   const parentId = parentSelect.value || null;
   const ddl = ddlInput.value || null;
-  const siblings = treeData.filter(i => i.parentId === parentId && i.zone === zone);
+  const siblings = treeData.filter(i => i.parentId === parentId && i.zone === zone && !i.isCopy);
   const maxOrder = siblings.reduce((max, s) => Math.max(max, s.order || 0), 0);
 
   treeData.push({
     id: generateId(), text, status: zone === 'goals' ? 'goal' : 'pending',
     zone, ddl, parentId, collapsed: false, order: maxOrder + 1,
-    statusChangedAt: null,
+    statusChangedAt: null, detachedParentId: null, isCopy: false,
   });
 
   if (parentId) {
@@ -414,28 +540,32 @@ async function addItem() {
 
 async function deleteItem(id) {
   pushUndo();
+  const item = treeData.find(i => i.id === id);
   const descendants = getDescendantIds(id);
   const idsToRemove = [id, ...descendants];
+
+  const originParentId = item?.detachedParentId || item?.parentId || item?.originParentId;
+
   for (const rid of idsToRemove) {
     if (moveTimers[rid]) { clearTimeout(moveTimers[rid]); delete moveTimers[rid]; }
   }
   treeData = treeData.filter(item => !idsToRemove.includes(item.id));
+
+  cleanupOrphanCopies(originParentId);
+
   await saveToFile();
   render();
 }
 
 async function clearZone(zoneId) {
   pushUndo();
-  const idsToRemove = treeData.filter(i => i.zone === zoneId).map(i => i.id);
+  const idsToRemove = treeData.filter(i => i.zone === zoneId && !i.isCopy).map(i => i.id);
   for (const id of idsToRemove) {
     if (moveTimers[id]) { clearTimeout(moveTimers[id]); delete moveTimers[id]; }
-    const descendants = getDescendantIds(id);
-    for (const did of descendants) {
-      if (moveTimers[did]) { clearTimeout(moveTimers[did]); delete moveTimers[did]; }
-    }
-    idsToRemove.push(...descendants);
+    idsToRemove.push(...getDescendantIds(id));
   }
-  treeData = treeData.filter(item => !idsToRemove.includes(item.id));
+  const copiesToRemove = treeData.filter(i => i.isCopy && i.zone === zoneId).map(i => i.id);
+  treeData = treeData.filter(item => !idsToRemove.includes(item.id) && !copiesToRemove.includes(item.id));
   await saveToFile();
   render();
 }
@@ -446,6 +576,7 @@ function updateParentSelect() {
 
   function addOptions(items, depth = 0) {
     for (const item of items) {
+      if (item.isCopy) continue;
       const prefix = '  '.repeat(depth) + (depth > 0 ? '├ ' : '');
       const option = document.createElement('option');
       option.value = item.id;
@@ -457,7 +588,7 @@ function updateParentSelect() {
   }
 
   for (const zone of ZONES) {
-    const topLevel = treeData.filter(i => i.zone === zone.id && !i.parentId);
+    const topLevel = treeData.filter(i => i.zone === zone.id && !i.parentId && !i.isCopy);
     addOptions(topLevel);
   }
 
@@ -466,15 +597,8 @@ function updateParentSelect() {
   }
 }
 
-async function collapseAll() {
-  treeData.forEach(item => { item.collapsed = true; });
-  render();
-}
-
-async function expandAll() {
-  treeData.forEach(item => { item.collapsed = false; });
-  render();
-}
+async function collapseAll() { treeData.forEach(item => { item.collapsed = true; }); render(); }
+async function expandAll() { treeData.forEach(item => { item.collapsed = false; }); render(); }
 
 async function changeFile() {
   const result = await window.todoAPI.changeFile();
@@ -489,21 +613,16 @@ async function changeFile() {
 
 function checkStaleStatuses() {
   for (const item of treeData) {
+    if (item.isCopy) continue;
     if (item.zone === 'todo') {
-      if (item.status === 'done') {
-        moveItemToZone(item.id, 'done');
-      } else if (item.status === 'abandoned') {
-        moveItemToZone(item.id, 'abandoned');
-      } else if (item.status === 'urgent') {
-        item.order = -Date.now();
-      }
+      if (item.status === 'done') moveWithParentCopy(item.id, 'done');
+      else if (item.status === 'abandoned') moveWithParentCopy(item.id, 'abandoned');
+      else if (item.status === 'urgent') item.order = -Date.now();
     }
   }
 }
 
-function handleKeydown(e) {
-  if (e.key === 'Enter') addItem();
-}
+function handleKeydown(e) { if (e.key === 'Enter') addItem(); }
 
 function updatePinUI() {
   if (pinned) {
@@ -524,27 +643,20 @@ function setupDrag() {
   headerEl.addEventListener('mousedown', (e) => {
     if (pinned) return;
     if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
-    isDragging = true;
-    dragStartX = e.screenX;
-    dragStartY = e.screenY;
+    isDragging = true; dragStartX = e.screenX; dragStartY = e.screenY;
     headerEl.style.cursor = 'grabbing';
   });
-
   document.addEventListener('mousemove', (e) => {
     if (!isDragging) return;
-    const dx = e.screenX - dragStartX;
-    const dy = e.screenY - dragStartY;
+    const dx = e.screenX - dragStartX, dy = e.screenY - dragStartY;
     if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return;
-    dragStartX = e.screenX;
-    dragStartY = e.screenY;
+    dragStartX = e.screenX; dragStartY = e.screenY;
     window.moveBy(dx, dy);
   });
-
   document.addEventListener('mouseup', async () => {
     if (!isDragging) return;
     isDragging = false;
     if (!pinned) headerEl.style.cursor = 'move';
-
     const wa = await window.todoAPI.getWorkArea();
     const { screenX: wx, screenY: wy, outerWidth: w, outerHeight: h } = window;
     const SNAP = 15;
@@ -557,24 +669,16 @@ function setupDrag() {
   });
 }
 
-async function togglePin() {
-  pinned = await window.todoAPI.togglePin();
-  updatePinUI();
-}
+async function togglePin() { pinned = await window.todoAPI.togglePin(); updatePinUI(); }
 
 let contextMenu = null;
 let contextMenuTargetId = null;
-
 function createContextMenu() {
   const menu = document.createElement('div');
   menu.className = 'context-menu';
-  menu.innerHTML = `
-    <div class="context-menu-item" data-action="delete">删除</div>
-    <div class="context-menu-item danger" data-action="delete-children">删除含子任务</div>
-  `;
+  menu.innerHTML = `<div class="context-menu-item" data-action="delete">删除</div><div class="context-menu-item danger" data-action="delete-all">删除含子任务</div>`;
   return menu;
 }
-
 function showContextMenu(e, id) {
   hideContextMenu();
   contextMenuTargetId = id;
@@ -582,33 +686,14 @@ function showContextMenu(e, id) {
   contextMenu.style.left = e.clientX + 'px';
   contextMenu.style.top = e.clientY + 'px';
   document.body.appendChild(contextMenu);
-
-  contextMenu.querySelector('[data-action="delete"]').addEventListener('click', () => {
-    deleteItem(id);
-    hideContextMenu();
-  });
-  contextMenu.querySelector('[data-action="delete-children"]').addEventListener('click', () => {
-    deleteItem(id);
-    hideContextMenu();
-  });
+  contextMenu.querySelector('[data-action="delete"]').addEventListener('click', () => { deleteItem(id); hideContextMenu(); });
+  contextMenu.querySelector('[data-action="delete-all"]').addEventListener('click', () => { deleteItem(id); hideContextMenu(); });
 }
+function hideContextMenu() { if (contextMenu) { contextMenu.remove(); contextMenu = null; } contextMenuTargetId = null; }
+document.addEventListener('click', (e) => { if (contextMenu && !contextMenu.contains(e.target)) hideContextMenu(); });
+document.addEventListener('contextmenu', (e) => { if (contextMenu && !contextMenu.contains(e.target)) hideContextMenu(); });
 
-function hideContextMenu() {
-  if (contextMenu) { contextMenu.remove(); contextMenu = null; }
-  contextMenuTargetId = null;
-}
-
-document.addEventListener('click', (e) => {
-  if (contextMenu && !contextMenu.contains(e.target)) hideContextMenu();
-});
-document.addEventListener('contextmenu', (e) => {
-  if (contextMenu && !contextMenu.contains(e.target)) hideContextMenu();
-});
-
-window.todoAPI.onPinStateChanged((newPinned) => {
-  pinned = newPinned;
-  updatePinUI();
-});
+window.todoAPI.onPinStateChanged((newPinned) => { pinned = newPinned; updatePinUI(); });
 
 document.addEventListener('DOMContentLoaded', async () => {
   zonesContainer = document.getElementById('zones-container');
@@ -650,15 +735,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   document.getElementById('shortcut-btn').addEventListener('click', async () => {
     const result = await window.todoAPI.createDesktopShortcut();
-    if (result.success) {
-      shortcutBtn.textContent = '✅ 已创建';
-      setTimeout(() => { shortcutBtn.textContent = '🖥 图标'; }, 2000);
-    }
+    if (result.success) { shortcutBtn.textContent = '✅ 已创建'; setTimeout(() => { shortcutBtn.textContent = '🖥 图标'; }, 2000); }
   });
   const shortcutBtn = document.getElementById('shortcut-btn');
 
   for (const item of treeData) {
-    if ((item.status === 'done' || item.status === 'urgent' || item.status === 'abandoned') && item.zone === 'todo') {
+    if (!item.isCopy && (item.status === 'done' || item.status === 'urgent' || item.status === 'abandoned') && item.zone === 'todo') {
       startAutoMove(item.id);
     }
   }

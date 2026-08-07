@@ -232,3 +232,10 @@ body {
 .context-menu-separator { height: 1px; background: rgba(180, 130, 50, 0.15); margin: 2px 0; }
 
 #undo-btn { font-size: 15px; padding: 4px 7px; }
+
+.tree-node.phantom {
+  opacity: 0.55; pointer-events: none; cursor: default;
+}
+.tree-node.phantom:hover { background: transparent; }
+.phantom-icon { font-size: 11px; color: rgba(201, 168, 76, 0.4); margin-right: 4px; }
+.phantom-text { font-size: 11px; color: rgba(201, 168, 76, 0.4); font-style: italic; }
