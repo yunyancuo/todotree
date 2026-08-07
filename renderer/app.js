@@ -553,11 +553,10 @@ async function processAutoMove(id) {
   const item = treeData.find(i => i.id === id);
   if (!item) return;
 
-  if (item.status === 'done' && item.zone === 'todo') {
-    moveWithParentCopy(id, 'done');
-  } else if (item.status === 'abandoned' && item.zone === 'todo') {
-    moveWithParentCopy(id, 'abandoned');
-  } else if (item.status === 'urgent' && item.zone === 'todo') {
+  const targetZone = { done: 'done', abandoned: 'abandoned', pending: 'todo' }[item.status];
+  if (targetZone && item.zone !== targetZone && item.zone !== 'goals') {
+    moveWithParentCopy(id, targetZone);
+  } else if (item.status === 'urgent') {
     item.order = -Date.now();
     await saveToFile();
     render();
@@ -737,10 +736,11 @@ async function changeFile() {
 function checkStaleStatuses() {
   for (const item of treeData) {
     if (item.isCopy || item.parentId) continue;
-    if (item.zone === 'todo') {
-      if (item.status === 'done') moveWithParentCopy(item.id, 'done');
-      else if (item.status === 'abandoned') moveWithParentCopy(item.id, 'abandoned');
-      else if (item.status === 'urgent') item.order = -Date.now();
+    const targetZone = { done: 'done', abandoned: 'abandoned', pending: 'todo' }[item.status];
+    if (targetZone && item.zone !== targetZone && item.zone !== 'goals') {
+      moveWithParentCopy(item.id, targetZone);
+    } else if (item.status === 'urgent') {
+      item.order = -Date.now();
     }
   }
 }
@@ -953,8 +953,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   const shortcutBtn = document.getElementById('shortcut-btn');
 
   for (const item of treeData) {
-    if (!item.isCopy && (item.status === 'done' || item.status === 'urgent' || item.status === 'abandoned') && item.zone === 'todo') {
-      startAutoMove(item.id);
+    if (!item.isCopy && (item.status === 'done' || item.status === 'urgent' || item.status === 'abandoned')) {
+      const targetZone = { done: 'done', abandoned: 'abandoned', pending: 'todo' }[item.status];
+      if (targetZone && item.zone !== targetZone && item.zone !== 'goals') {
+        startAutoMove(item.id);
+      }
     }
   }
 });
