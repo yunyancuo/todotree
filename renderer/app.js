@@ -223,11 +223,41 @@ function render() {
 
     section.appendChild(header);
     section.appendChild(body);
+
+    if (zone.id !== 'abandoned') {
+      const handle = document.createElement('div');
+      handle.className = 'zone-resize-handle';
+      setupResizeHandle(handle, body);
+      section.appendChild(handle);
+    }
+
     zonesContainer.appendChild(section);
   }
 
   statsEl.textContent = `共 ${totalCount} 项`;
   updateParentSelect();
+}
+
+function setupResizeHandle(handle, body) {
+  let startY, startHeight;
+  handle.addEventListener('mousedown', e => {
+    e.preventDefault();
+    startY = e.clientY;
+    startHeight = body.offsetHeight;
+    document.addEventListener('mousemove', onResize);
+    document.addEventListener('mouseup', onResizeEnd);
+  });
+
+  function onResize(e) {
+    const delta = e.clientY - startY;
+    const newHeight = Math.max(40, startHeight + delta);
+    body.style.maxHeight = newHeight + 'px';
+  }
+
+  function onResizeEnd() {
+    document.removeEventListener('mousemove', onResize);
+    document.removeEventListener('mouseup', onResizeEnd);
+  }
 }
 
 function renderItems(allZoneItems, items, depth, container) {
@@ -475,7 +505,7 @@ function updatePinUI() {
   if (pinned) {
     pinBtn.textContent = '📌';
     pinBtn.className = 'btn-icon pinned';
-    pinBtn.title = '已锁定 | 点击解锁';
+    pinBtn.title = '已锁定 (底层模式) | 点击解锁拖动';
     headerEl.style.cursor = 'default';
     document.body.style.cursor = 'default';
   } else {
@@ -605,6 +635,23 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('undo-btn').addEventListener('click', undo);
   document.getElementById('close-btn').addEventListener('click', () => window.todoAPI.closeApp());
   newTodoInput.addEventListener('keydown', handleKeydown);
+
+  const autoStartBtn = document.getElementById('auto-start-btn');
+  const autoStartState = await window.todoAPI.getAutoStart();
+  if (autoStartState) autoStartBtn.classList.add('active');
+  autoStartBtn.addEventListener('click', async () => {
+    const state = await window.todoAPI.toggleAutoStart();
+    autoStartBtn.classList.toggle('active', state);
+  });
+
+  document.getElementById('shortcut-btn').addEventListener('click', async () => {
+    const result = await window.todoAPI.createDesktopShortcut();
+    if (result.success) {
+      shortcutBtn.textContent = '✅ 已创建';
+      setTimeout(() => { shortcutBtn.textContent = '🖥 图标'; }, 2000);
+    }
+  });
+  const shortcutBtn = document.getElementById('shortcut-btn');
 
   for (const item of treeData) {
     if ((item.status === 'done' || item.status === 'urgent' || item.status === 'abandoned') && item.zone === 'todo') {

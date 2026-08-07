@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, screen, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -27,7 +27,6 @@ function readTodoFile(filePath) {
   }
   return fs.readFileSync(filePath, 'utf-8');
 }
-
 function writeTodoFile(filePath, content) {
   fs.writeFileSync(filePath, content, 'utf-8');
 }
@@ -35,13 +34,17 @@ function writeTodoFile(filePath, content) {
 function applyPinState(sendEvent = true) {
   if (!mainWindow) return;
   if (isPinned) {
-    mainWindow.setAlwaysOnTop(true, 'screen-saver');
+    mainWindow.setAlwaysOnTop(false);
+    mainWindow.setFocusable(false);
     mainWindow.setSkipTaskbar(true);
     mainWindow.setResizable(false);
+    mainWindow.setMovable(false);
   } else {
     mainWindow.setAlwaysOnTop(false);
+    mainWindow.setFocusable(true);
     mainWindow.setSkipTaskbar(true);
     mainWindow.setResizable(true);
+    mainWindow.setMovable(true);
   }
   if (sendEvent) mainWindow.webContents.send('pin-state-changed', isPinned);
 }
@@ -49,14 +52,15 @@ function applyPinState(sendEvent = true) {
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 520,
-    height: 720,
-    minWidth: 400,
-    minHeight: 400,
+    height: 740,
+    minWidth: 420,
+    minHeight: 500,
     resizable: true,
     frame: false,
     transparent: true,
+    focusable: false,
     skipTaskbar: true,
-    alwaysOnTop: true,
+    alwaysOnTop: false,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -70,7 +74,6 @@ function createWindow() {
   mainWindow.on('ready-to-show', () => {
     mainWindow.show();
     applyPinState(false);
-    mainWindow.setResizable(false);
   });
 }
 
@@ -106,6 +109,33 @@ ipcMain.handle('get-file-path', () => currentFilePath);
 ipcMain.handle('toggle-pin', () => { isPinned = !isPinned; applyPinState(); return isPinned; });
 ipcMain.handle('close-app', () => app.quit());
 ipcMain.handle('get-work-area', () => screen.getDisplayMatching(mainWindow.getBounds()).workArea);
+
+ipcMain.handle('get-auto-start', () => {
+  return app.getLoginItemSettings().openAtLogin;
+});
+
+ipcMain.handle('toggle-auto-start', () => {
+  const current = app.getLoginItemSettings().openAtLogin;
+  app.setLoginItemSettings({ openAtLogin: !current });
+  return !current;
+});
+
+ipcMain.handle('create-desktop-shortcut', () => {
+  try {
+    const desktop = path.join(os.homedir(), 'Desktop');
+    const target = process.execPath;
+    const appDir = __dirname;
+    const shortcutPath = path.join(desktop, 'TodoTree.lnk');
+    const psScript = path.join(app.getPath('temp'), 'todotree_shortcut.ps1');
+    const psContent = `$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('${shortcutPath.replace(/'/g, "''")}'); $s.TargetPath = '${target.replace(/'/g, "''")}'; $s.Arguments = '.'; $s.WorkingDirectory = '${appDir.replace(/'/g, "''")}'; $s.Save()`;
+    fs.writeFileSync(psScript, psContent, 'utf-8');
+    require('child_process').execSync(`powershell -ExecutionPolicy Bypass -File "${psScript}"`, { windowsHide: true });
+    try { fs.unlinkSync(psScript); } catch (_) {}
+    return { success: true, path: shortcutPath };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
 
 app.whenReady().then(() => {
   createWindow();
