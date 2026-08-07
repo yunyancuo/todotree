@@ -1,4 +1,4 @@
-const ZONES = [
+let zones = [
   { id: 'todo', name: '待完成', order: 0 },
   { id: 'done', name: '已完成', order: 1 },
   { id: 'goals', name: '目标', order: 2 },
@@ -134,7 +134,7 @@ function parseMarkdown(text) {
 function exportMarkdown() {
   const lines = ['# TodoTree', ''];
 
-  for (const zone of ZONES) {
+  for (const zone of zones) {
     lines.push(`## ${zone.name}`);
     lines.push('');
 
@@ -179,7 +179,7 @@ function render() {
 
   let totalCount = 0;
 
-  for (const zone of ZONES) {
+  for (const zone of zones) {
     const zoneItems = getZoneItems(zone.id);
     totalCount += zoneItems.filter(i => !i.isCopy).length;
 
@@ -189,11 +189,36 @@ function render() {
 
     const header = document.createElement('div');
     header.className = 'zone-header';
+    header.draggable = true;
     header.innerHTML = `
+      <span class="zone-drag-handle">⠿</span>
       <span class="zone-toggle">▼</span>
       <span class="zone-name">${zone.name}</span>
       <span class="zone-count">${zoneItems.filter(i => !i.isCopy).length} 项</span>
     `;
+
+    header.addEventListener('dragstart', e => {
+      e.dataTransfer.setData('text/zone', zone.id);
+      e.dataTransfer.effectAllowed = 'move';
+      header.classList.add('dragging');
+    });
+    header.addEventListener('dragend', () => { header.classList.remove('dragging'); });
+    header.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; header.classList.add('drag-over'); });
+    header.addEventListener('dragleave', () => { header.classList.remove('drag-over'); });
+    header.addEventListener('drop', e => {
+      e.preventDefault();
+      header.classList.remove('drag-over');
+      const fromZoneId = e.dataTransfer.getData('text/zone');
+      if (fromZoneId && fromZoneId !== zone.id) {
+        const fromIdx = zones.findIndex(z => z.id === fromZoneId);
+        const toIdx = zones.findIndex(z => z.id === zone.id);
+        if (fromIdx >= 0 && toIdx >= 0) {
+          const [moved] = zones.splice(fromIdx, 1);
+          zones.splice(toIdx, 0, moved);
+          render();
+        }
+      }
+    });
 
     const clearBtn = document.createElement('button');
     clearBtn.className = 'zone-clear';
@@ -288,6 +313,27 @@ function renderSingleItem(allZoneItems, item, depth, container) {
 
   const nodeDiv = document.createElement('div');
   nodeDiv.className = `tree-node ${indentClass}`;
+  nodeDiv.dataset.id = item.id;
+  nodeDiv.draggable = true;
+
+  nodeDiv.addEventListener('dragstart', e => {
+    e.dataTransfer.setData('text/plain', item.id);
+    e.dataTransfer.effectAllowed = 'move';
+    nodeDiv.classList.add('dragging');
+  });
+  nodeDiv.addEventListener('dragend', () => { nodeDiv.classList.remove('dragging'); });
+  nodeDiv.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; nodeDiv.classList.add('drag-over'); });
+  nodeDiv.addEventListener('dragleave', () => { nodeDiv.classList.remove('drag-over'); });
+  nodeDiv.addEventListener('drop', e => {
+    e.preventDefault();
+    nodeDiv.classList.remove('drag-over');
+    const fromId = e.dataTransfer.getData('text/plain');
+    if (fromId && fromId !== item.id) reorderItems(fromId, item.id);
+  });
+
+  const numSpan = document.createElement('span');
+  numSpan.className = 'item-num';
+  numSpan.textContent = getSiblingIndex(item);
 
   const toggleBtn = document.createElement('button');
   toggleBtn.className = `toggle-btn${hasChildren ? '' : ' empty'}`;
@@ -317,6 +363,7 @@ function renderSingleItem(allZoneItems, item, depth, container) {
   deleteBtn.textContent = '\u00D7';
   deleteBtn.addEventListener('click', e => { e.stopPropagation(); deleteItem(item.id); });
 
+  nodeDiv.appendChild(numSpan);
   nodeDiv.appendChild(toggleBtn);
   nodeDiv.appendChild(dot);
   nodeDiv.appendChild(textSpan);
@@ -355,6 +402,43 @@ function setupResizeHandle(handle, body) {
     document.removeEventListener('mousemove', onResize);
     document.removeEventListener('mouseup', onResizeEnd);
   }
+}
+
+async function reorderItems(fromId, toId) {
+  const fromItem = treeData.find(i => i.id === fromId);
+  const toItem = treeData.find(i => i.id === toId);
+  if (!fromItem || !toItem || fromItem.parentId !== toItem.parentId || fromItem.zone !== toItem.zone || fromItem.isCopy || toItem.isCopy) return;
+
+  pushUndo();
+
+  const siblings = treeData.filter(i => i.parentId === fromItem.parentId && i.zone === fromItem.zone && !i.isCopy);
+  const fromIdx = siblings.indexOf(fromItem);
+  const toIdx = siblings.indexOf(toItem);
+  siblings.splice(fromIdx, 1);
+  siblings.splice(toIdx, 0, fromItem);
+  siblings.forEach((s, i) => { s.order = i + 1; });
+
+  await saveToFile();
+  render();
+}
+
+function updateItemNumbers() {
+  for (const zone of zones) {
+    const zoneItems = treeData.filter(i => i.zone === zone.id);
+    const topLevel = zoneItems.filter(i => !i.parentId && !i.isCopy);
+    topLevel.forEach((item, idx) => { item.order = idx + 1; });
+    for (const parent of zoneItems.filter(i => !i.isCopy && zoneItems.some(c => c.parentId === i.id))) {
+      const children = zoneItems.filter(i => i.parentId === parent.id && !i.isCopy);
+      children.forEach((c, idx) => { c.order = idx + 1; });
+    }
+  }
+}
+
+function getSiblingIndex(item) {
+  if (!item) return '';
+  const siblings = treeData.filter(i => i.parentId === item.parentId && i.zone === item.zone && !i.isCopy);
+  const idx = siblings.indexOf(item);
+  return idx >= 0 ? (idx + 1) : '';
 }
 
 function cycleTooltip(status) {
@@ -476,7 +560,7 @@ function moveDescendants(id, newZone) {
 
 function cleanupOrphanCopies(originParentId) {
   if (!originParentId) return;
-  for (const zone of ZONES) {
+  for (const zone of zones) {
     const copies = treeData.filter(i => i.isCopy && i.originParentId === originParentId && i.zone === zone.id);
     for (const copy of copies) {
       const hasItems = treeData.some(i =>
@@ -587,7 +671,7 @@ function updateParentSelect() {
     }
   }
 
-  for (const zone of ZONES) {
+  for (const zone of zones) {
     const topLevel = treeData.filter(i => i.zone === zone.id && !i.parentId && !i.isCopy);
     addOptions(topLevel);
   }
@@ -676,7 +760,12 @@ let contextMenuTargetId = null;
 function createContextMenu() {
   const menu = document.createElement('div');
   menu.className = 'context-menu';
-  menu.innerHTML = `<div class="context-menu-item" data-action="delete">删除</div><div class="context-menu-item danger" data-action="delete-all">删除含子任务</div>`;
+  menu.innerHTML = `
+    <div class="context-menu-item" data-action="add-ddl">添加/修改 DDL</div>
+    <div class="context-menu-separator"></div>
+    <div class="context-menu-item danger" data-action="delete">删除</div>
+    <div class="context-menu-item danger" data-action="delete-all">删除含子任务</div>
+  `;
   return menu;
 }
 function showContextMenu(e, id) {
@@ -688,6 +777,18 @@ function showContextMenu(e, id) {
   document.body.appendChild(contextMenu);
   contextMenu.querySelector('[data-action="delete"]').addEventListener('click', () => { deleteItem(id); hideContextMenu(); });
   contextMenu.querySelector('[data-action="delete-all"]').addEventListener('click', () => { deleteItem(id); hideContextMenu(); });
+  contextMenu.querySelector('[data-action="add-ddl"]').addEventListener('click', () => {
+    const item = treeData.find(i => i.id === id);
+    if (!item) return;
+    const current = item.ddl || '';
+    const input = prompt('输入截止日期 (YYYY-MM-DD)：', current);
+    if (input !== null) {
+      const trimmed = input.trim();
+      item.ddl = trimmed || null;
+      saveToFile().then(() => render());
+    }
+    hideContextMenu();
+  });
 }
 function hideContextMenu() { if (contextMenu) { contextMenu.remove(); contextMenu = null; } contextMenuTargetId = null; }
 document.addEventListener('click', (e) => { if (contextMenu && !contextMenu.contains(e.target)) hideContextMenu(); });

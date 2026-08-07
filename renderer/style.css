@@ -106,8 +106,12 @@ body {
   flex-shrink: 0;
 }
 .zone-header:hover { background: rgba(180, 130, 50, 0.08); }
+.zone-header.dragging { opacity: 0.4; }
+.zone-header.drag-over { border-top: 2px solid #c9a84c; }
 
 .zone-toggle { font-size: 10px; color: rgba(201, 168, 76, 0.5); width: 14px; flex-shrink: 0; }
+.zone-drag-handle { font-size: 12px; color: rgba(201, 168, 76, 0.25); cursor: grab; flex-shrink: 0; letter-spacing: -2px; }
+.zone-drag-handle:active { cursor: grabbing; }
 .zone-name { font-size: 13px; font-weight: 600; color: #c9a84c; flex: 1; }
 .zone-count { font-size: 10px; color: rgba(201, 168, 76, 0.3); margin-right: 8px; }
 
@@ -137,6 +141,13 @@ body {
   padding: 3px 12px; min-height: 28px; cursor: default;
 }
 .tree-node:hover { background: rgba(180, 130, 50, 0.06); }
+.tree-node.dragging { opacity: 0.35; }
+.tree-node.drag-over { border-top: 2px solid #c9a84c; }
+
+.item-num {
+  font-size: 9px; color: rgba(201, 168, 76, 0.3); width: 16px; text-align: right;
+  flex-shrink: 0; font-variant-numeric: tabular-nums;
+}
 
 .toggle-btn {
   width: 14px; height: 14px; padding: 0; border: none; background: none;
