@@ -126,6 +126,10 @@ ipcMain.handle('change-file', async () => {
 ipcMain.handle('get-file-path', () => currentFilePath);
 ipcMain.handle('toggle-pin', () => { isPinned = !isPinned; applyPinState(); return isPinned; });
 ipcMain.handle('close-app', () => app.quit());
+ipcMain.handle('reload-renderer', () => {
+  if (mainWindow) mainWindow.reload();
+  return true;
+});
 ipcMain.handle('get-work-area', () => screen.getDisplayMatching(mainWindow.getBounds()).workArea);
 ipcMain.handle('set-focusable', (_e, focusable) => { if (mainWindow) mainWindow.setFocusable(focusable); });
 

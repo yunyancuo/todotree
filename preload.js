@@ -15,4 +15,5 @@ contextBridge.exposeInMainWorld('todoAPI', {
   getZoneHeights: () => ipcRenderer.invoke('get-zone-heights'),
   saveZoneHeights: (h) => ipcRenderer.invoke('save-zone-heights', h),
   onPinStateChanged: (callback) => ipcRenderer.on('pin-state-changed', (_e, pinned) => callback(pinned)),
+  reloadRenderer: () => ipcRenderer.invoke('reload-renderer'),
 });

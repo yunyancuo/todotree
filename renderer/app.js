@@ -520,7 +520,26 @@ async function cycleStatus(id) {
   }
 
   await saveToFile();
-  render();
+  updateNodeStatus(id);
+}
+
+function updateNodeStatus(id) {
+  const item = treeData.find(i => i.id === id);
+  if (!item) return;
+
+  const node = document.querySelector(`.tree-node[data-id="${id}"]`);
+  if (!node) return;
+
+  const dot = node.querySelector('.status-dot');
+  if (dot) {
+    dot.className = `status-dot ${item.status}`;
+    dot.title = cycleTooltip(item.status);
+  }
+
+  const textSpan = node.querySelector('.node-text');
+  if (textSpan) {
+    textSpan.className = `node-text ${item.status}`;
+  }
 }
 
 function cascadeStatus(parentId, status, fromParent = false) {
