@@ -163,10 +163,13 @@ async function saveToFile() {
 
 function render() {
   const savedHeights = {};
+  const savedScrollTops = {};
+  const containerScrollTop = zonesContainer.scrollTop;
   document.querySelectorAll('.zone-body').forEach(body => {
     const section = body.closest('.zone-section');
     const zoneId = section?.dataset?.zoneId;
     if (zoneId && body.style.height) savedHeights[zoneId] = body.style.height;
+    if (zoneId) savedScrollTops[zoneId] = body.scrollTop;
   });
 
   zonesContainer.innerHTML = '';
@@ -245,10 +248,20 @@ function render() {
     section.appendChild(handle);
 
     zonesContainer.appendChild(section);
+
+    if (savedScrollTops[zone.id]) {
+      requestAnimationFrame(() => {
+        body.scrollTop = savedScrollTops[zone.id];
+      });
+    }
   }
 
   statsEl.textContent = `共 ${totalCount} 项`;
   updateParentSelect();
+
+  requestAnimationFrame(() => {
+    zonesContainer.scrollTop = containerScrollTop;
+  });
 }
 
 function renderZoneItems(zoneId, zoneItems, container) {
@@ -528,7 +541,10 @@ function updateNodeStatus(id) {
   if (!item) return;
 
   const node = document.querySelector(`.tree-node[data-id="${id}"]`);
-  if (!node) return;
+  if (!node) {
+    render();
+    return;
+  }
 
   const dot = node.querySelector('.status-dot');
   if (dot) {
