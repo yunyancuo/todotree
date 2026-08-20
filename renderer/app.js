@@ -27,6 +27,8 @@ let undoStack = [];
 const MAX_UNDO = 20;
 let undoBtn;
 let persistedHeights = {};
+let lastSyncMtime = null;
+let savingInProgress = false;
 
 function pushUndo() {
   undoStack.push(JSON.parse(JSON.stringify(treeData)));
@@ -158,7 +160,17 @@ function exportMarkdown() {
 }
 
 async function saveToFile() {
-  await window.todoAPI.save(exportMarkdown());
+  savingInProgress = true;
+  try {
+    const diskMtime = await window.todoAPI.getFileMtime();
+    if (lastSyncMtime !== null && diskMtime !== null && diskMtime !== lastSyncMtime) {
+      await window.todoAPI.backupTodoFile();
+    }
+    await window.todoAPI.save(exportMarkdown());
+    lastSyncMtime = await window.todoAPI.getFileMtime();
+  } finally {
+    savingInProgress = false;
+  }
 }
 
 function render() {
@@ -970,6 +982,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('open-file-btn').addEventListener('click', changeFile);
   document.getElementById('pin-btn').addEventListener('click', togglePin);
   document.getElementById('undo-btn').addEventListener('click', undo);
+  document.getElementById('refresh-btn').addEventListener('click', () => window.todoAPI.reloadRenderer());
   document.getElementById('close-btn').addEventListener('click', () => window.todoAPI.closeApp());
   newTodoInput.addEventListener('keydown', handleKeydown);
 
@@ -996,3 +1009,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 });
+
+setInterval(async () => {
+  if (savingInProgress || lastSyncMtime === null || isDragging) return;
+  if (document.querySelector('.modal-overlay')) return;
+  const mtime = await window.todoAPI.getFileMtime();
+  if (mtime !== null && mtime !== lastSyncMtime) {
+    window.todoAPI.reloadRenderer();
+  }
+}, 15000);

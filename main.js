@@ -130,6 +130,18 @@ ipcMain.handle('reload-renderer', () => {
   if (mainWindow) mainWindow.reload();
   return true;
 });
+ipcMain.handle('get-file-mtime', () => {
+  try { return fs.statSync(currentFilePath).mtimeMs; } catch (_) { return null; }
+});
+ipcMain.handle('backup-todo-file', () => {
+  try {
+    if (!fs.existsSync(currentFilePath)) return { success: false };
+    const ts = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
+    const backupPath = currentFilePath.replace(/\.md$/i, '') + `_外部修改备份_${ts}.md`;
+    fs.copyFileSync(currentFilePath, backupPath);
+    return { success: true, path: backupPath };
+  } catch (e) { return { success: false, error: e.message }; }
+});
 ipcMain.handle('get-work-area', () => screen.getDisplayMatching(mainWindow.getBounds()).workArea);
 ipcMain.handle('set-focusable', (_e, focusable) => { if (mainWindow) mainWindow.setFocusable(focusable); });
 

@@ -3,5 +3,6 @@ dist/
 out/
 *.exe
 *.png
+!icon.png
 .DS_Store
 Thumbs.db

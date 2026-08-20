@@ -1,6 +1,6 @@
 {
   "name": "todotree",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "暗金半透明桌面待办工具 - 4 分区自动化任务管理",
   "main": "main.js",
   "scripts": {

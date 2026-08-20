@@ -16,4 +16,6 @@ contextBridge.exposeInMainWorld('todoAPI', {
   saveZoneHeights: (h) => ipcRenderer.invoke('save-zone-heights', h),
   onPinStateChanged: (callback) => ipcRenderer.on('pin-state-changed', (_e, pinned) => callback(pinned)),
   reloadRenderer: () => ipcRenderer.invoke('reload-renderer'),
+  getFileMtime: () => ipcRenderer.invoke('get-file-mtime'),
+  backupTodoFile: () => ipcRenderer.invoke('backup-todo-file'),
 });
