@@ -1013,12 +1013,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     autoStartBtn.classList.toggle('active', state);
   });
 
-  document.getElementById('shortcut-btn').addEventListener('click', async () => {
-    const result = await window.todoAPI.createDesktopShortcut();
-    if (result.success) { shortcutBtn.textContent = '✅ 已创建'; setTimeout(() => { shortcutBtn.textContent = '🖥 图标'; }, 2000); }
-  });
-  const shortcutBtn = document.getElementById('shortcut-btn');
-
   for (const item of treeData) {
     if (!item.isCopy && (item.status === 'done' || item.status === 'urgent' || item.status === 'abandoned')) {
       const targetZone = { done: 'done', abandoned: 'abandoned', pending: 'todo' }[item.status];

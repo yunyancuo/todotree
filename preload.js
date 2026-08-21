@@ -10,7 +10,6 @@ contextBridge.exposeInMainWorld('todoAPI', {
   getWorkArea: () => ipcRenderer.invoke('get-work-area'),
   getAutoStart: () => ipcRenderer.invoke('get-auto-start'),
   toggleAutoStart: () => ipcRenderer.invoke('toggle-auto-start'),
-  createDesktopShortcut: () => ipcRenderer.invoke('create-desktop-shortcut'),
   setFocusable: (v) => ipcRenderer.invoke('set-focusable', v),
   getZoneHeights: () => ipcRenderer.invoke('get-zone-heights'),
   saveZoneHeights: (h) => ipcRenderer.invoke('save-zone-heights', h),

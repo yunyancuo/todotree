@@ -1,21 +1,26 @@
 {
   "name": "todotree",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "暗金半透明桌面待办工具 - 4 分区自动化任务管理",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder --win portable"
+    "build": "electron-builder --win nsis"
   },
   "build": {
     "appId": "com.todotree.app",
     "productName": "TodoTree",
     "win": {
-      "target": "portable",
+      "target": "nsis",
       "icon": "icon.png"
     },
-    "portable": {
-      "artifactName": "TodoTree-${version}.exe"
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "artifactName": "TodoTree-Setup-${version}.exe"
     },
     "files": [
       "main.js",
