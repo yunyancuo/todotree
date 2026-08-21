@@ -254,10 +254,12 @@ function render() {
     if (savedHeights[zone.id]) body.style.height = savedHeights[zone.id];
     else if (persistedHeights[zone.id]) body.style.height = persistedHeights[zone.id];
 
-    const handle = document.createElement('div');
-    handle.className = 'zone-resize-handle';
-    setupResizeHandle(handle, body, zone.id);
-    section.appendChild(handle);
+    if (zone !== zones[zones.length - 1]) {
+      const handle = document.createElement('div');
+      handle.className = 'zone-resize-handle';
+      setupResizeHandle(handle, body, zone.id);
+      section.appendChild(handle);
+    }
 
     zonesContainer.appendChild(section);
 
@@ -272,8 +274,23 @@ function render() {
   updateParentSelect();
 
   requestAnimationFrame(() => {
+    fitLastZone();
     zonesContainer.scrollTop = containerScrollTop;
   });
+}
+
+// 最后一个分区(放弃)底线钉在窗口下边缘：多余空间由它吸收，溢出由它收缩，最小 40px
+function fitLastZone() {
+  const sections = zonesContainer.querySelectorAll('.zone-section');
+  if (sections.length === 0) return;
+  let total = 0;
+  sections.forEach(s => { total += s.offsetHeight; });
+  const last = sections[sections.length - 1];
+  const lastBody = last.querySelector('.zone-body');
+  if (!lastBody) return;
+  const diff = zonesContainer.clientHeight - total;
+  const newBodyH = Math.max(40, lastBody.offsetHeight + diff);
+  lastBody.style.height = newBodyH + 'px';
 }
 
 function renderZoneItems(zoneId, zoneItems, container) {
@@ -450,6 +467,7 @@ function setupResizeHandle(handle, body, zoneId) {
     document.removeEventListener('mousemove', onResize);
     document.removeEventListener('mouseup', onResizeEnd);
     persistZoneHeights();
+    fitLastZone();
   }
 }
 
@@ -966,6 +984,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   pinBtn = document.getElementById('pin-btn');
   undoBtn = document.getElementById('undo-btn');
   setupDrag();
+  window.addEventListener('resize', () => requestAnimationFrame(fitLastZone));
 
   const result = await window.todoAPI.load();
   treeData = parseMarkdown(result.content);
