@@ -98,6 +98,11 @@ body {
   min-height: 34px;
   flex-shrink: 0;
 }
+/* 最后一个分区(放弃)钉在容器底部，上面的分区拉长也不会把它挤出去 */
+.zone-section:last-child {
+  position: sticky; bottom: 0; z-index: 6;
+  background: rgba(15, 12, 5, 0.96);
+}
 
 .zone-header {
   display: flex; align-items: center; gap: 6px;
