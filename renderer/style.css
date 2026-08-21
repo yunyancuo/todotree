@@ -102,9 +102,10 @@ body {
 .zone-header {
   display: flex; align-items: center; gap: 6px;
   padding: 6px 12px; cursor: pointer;
-  background: rgba(20, 15, 5, 0.4);
+  background: rgba(20, 15, 5, 0.92);
   border-bottom: 1px solid rgba(180, 130, 50, 0.1);
   flex-shrink: 0;
+  position: sticky; top: 0; z-index: 5;
 }
 .zone-header:hover { background: rgba(180, 130, 50, 0.08); }
 .zone-header.dragging { opacity: 0.4; }
