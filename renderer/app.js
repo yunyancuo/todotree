@@ -1013,6 +1013,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     autoStartBtn.classList.toggle('active', state);
   });
 
+  // 字号循环切换：小 → 中 → 大 → 特大
+  const FONT_STEPS = [
+    { scale: 0.9, label: '小' },
+    { scale: 1, label: '中' },
+    { scale: 1.2, label: '大' },
+    { scale: 1.4, label: '特大' },
+  ];
+  const fontBtn = document.getElementById('font-btn');
+  let fontStep = FONT_STEPS.findIndex(s => s.scale === parseFloat(localStorage.getItem('fontScale')));
+  if (fontStep < 0) fontStep = 1;
+  const applyFontStep = () => {
+    const step = FONT_STEPS[fontStep];
+    document.documentElement.style.setProperty('--font-scale', step.scale);
+    fontBtn.textContent = `A 字号:${step.label}`;
+    localStorage.setItem('fontScale', String(step.scale));
+    requestAnimationFrame(fitLastZone);
+  };
+  applyFontStep();
+  fontBtn.addEventListener('click', () => {
+    fontStep = (fontStep + 1) % FONT_STEPS.length;
+    applyFontStep();
+  });
+
   for (const item of treeData) {
     if (!item.isCopy && (item.status === 'done' || item.status === 'urgent' || item.status === 'abandoned')) {
       const targetZone = { done: 'done', abandoned: 'abandoned', pending: 'todo' }[item.status];

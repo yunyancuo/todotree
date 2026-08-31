@@ -41,8 +41,9 @@ function applyPinState(sendEvent = true) {
     mainWindow.setAlwaysOnTop(false);
     mainWindow.setFocusable(false);
     mainWindow.setSkipTaskbar(true);
-    mainWindow.setResizable(false);
     mainWindow.setMovable(false);
+    // 锁定模式下仍允许拉伸窗口边缘（横向拉宽等），只禁拖动
+    mainWindow.setResizable(true);
   } else {
     mainWindow.setAlwaysOnTop(false);
     mainWindow.setFocusable(true);
@@ -59,8 +60,8 @@ function createWindow() {
     y: windowBounds.y,
     width: windowBounds.width,
     height: windowBounds.height,
-    minWidth: 420,
-    minHeight: 500,
+    minWidth: 320,
+    minHeight: 400,
     resizable: true,
     frame: false,
     transparent: true,
