@@ -759,6 +759,7 @@ async function clearZone(zoneId) {
 
 function updateParentSelect() {
   const currentValue = parentSelect.value;
+  const selectedZone = zoneSelect ? zoneSelect.value : null;
   parentSelect.innerHTML = '<option value="">-- 根 --</option>';
 
   function addOptions(items, depth = 0) {
@@ -769,18 +770,24 @@ function updateParentSelect() {
       option.value = item.id;
       option.textContent = prefix + item.text;
       parentSelect.appendChild(option);
-      const children = getChildren(item.id);
+      const children = getChildren(item.id).filter(i => !i.isCopy);
       if (children.length > 0) addOptions(children, depth + 1);
     }
   }
 
   for (const zone of zones) {
+    // 只列当前所选分区下现存的条目，避免残留其他分区/已删除的旧上游
+    if (selectedZone && zone.id !== selectedZone) continue;
     const topLevel = treeData.filter(i => i.zone === zone.id && !i.parentId && !i.isCopy);
     addOptions(topLevel);
   }
 
-  if (currentValue && treeData.some(i => i.id === currentValue)) {
+  // 选中项必须仍然存在且属于当前分区，否则回落到 -- 根 --
+  const sel = treeData.find(i => i.id === currentValue);
+  if (sel && !sel.isCopy && (!selectedZone || sel.zone === selectedZone)) {
     parentSelect.value = currentValue;
+  } else {
+    parentSelect.value = '';
   }
 }
 
@@ -1004,6 +1011,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('refresh-btn').addEventListener('click', () => window.todoAPI.reloadRenderer());
   document.getElementById('close-btn').addEventListener('click', () => window.todoAPI.closeApp());
   newTodoInput.addEventListener('keydown', handleKeydown);
+  zoneSelect.addEventListener('change', () => updateParentSelect());
 
   const autoStartBtn = document.getElementById('auto-start-btn');
   const autoStartState = await window.todoAPI.getAutoStart();
