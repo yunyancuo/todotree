@@ -902,6 +902,15 @@ function setupDrag() {
 
 async function togglePin() { pinned = await window.todoAPI.togglePin(); updatePinUI(); }
 
+// 锁定模式下点输入框：请求主进程临时摘回桌面层，拿到键盘焦点后再输入
+document.addEventListener('mousedown', async (e) => {
+  if (!pinned) return;
+  const input = e.target.closest('input, textarea');
+  if (!input) return;
+  const detached = await window.todoAPI.beginTransientEdit();
+  if (detached) setTimeout(() => input.focus(), 60);
+});
+
 let contextMenu = null;
 let contextMenuTargetId = null;
 function showContextMenu(e, id) {

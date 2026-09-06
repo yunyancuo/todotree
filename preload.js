@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('todoAPI', {
   changeFile: () => ipcRenderer.invoke('change-file'),
   getFilePath: () => ipcRenderer.invoke('get-file-path'),
   togglePin: () => ipcRenderer.invoke('toggle-pin'),
+  beginTransientEdit: () => ipcRenderer.invoke('begin-transient-edit'),
   closeApp: () => ipcRenderer.invoke('close-app'),
   getWorkArea: () => ipcRenderer.invoke('get-work-area'),
   getAutoStart: () => ipcRenderer.invoke('get-auto-start'),

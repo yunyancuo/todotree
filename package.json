@@ -1,6 +1,6 @@
 {
   "name": "todotree",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "暗金半透明桌面待办工具 - 4 分区自动化任务管理",
   "main": "main.js",
   "scripts": {
@@ -34,5 +34,8 @@
     "electron": "^33.0.0",
     "electron-builder": "^26.15.3"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "koffi": "^3.2.1"
+  }
 }

@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, dialog, Menu, screen, shell } = require('electron');
+const desktopLayer = require('./desktop-layer');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -7,6 +8,9 @@ let currentFilePath = path.join(os.homedir(), 'Desktop', 'TODOTREE.md');
 let configPath = path.join(app.getPath('userData'), 'config.json');
 let mainWindow;
 let isPinned = true;
+let expectQuit = false;
+let transientEdit = false;
+let recreateCount = 0;
 let windowBounds = { x: undefined, y: undefined, width: 520, height: 740 };
 
 function loadConfig() {
@@ -39,13 +43,21 @@ function applyPinState(sendEvent = true) {
   if (!mainWindow) return;
   if (isPinned) {
     mainWindow.setAlwaysOnTop(false);
-    mainWindow.setFocusable(false);
     mainWindow.setSkipTaskbar(true);
-    mainWindow.setMovable(false);
     // 锁定模式下仍允许拉伸窗口边缘（横向拉宽等），只禁拖动
     mainWindow.setResizable(true);
+    mainWindow.setMovable(false);
+    try {
+      desktopLayer.attach(mainWindow);
+      mainWindow.setFocusable(false);
+    } catch (e) {
+      // 环境不支持桌面层时回退为普通窗口
+      console.error('[desktop-layer] attach failed:', e.message);
+      mainWindow.setFocusable(false);
+    }
   } else {
     mainWindow.setAlwaysOnTop(false);
+    try { desktopLayer.detach(mainWindow); } catch (e) { console.error('[desktop-layer] detach failed:', e.message); }
     mainWindow.setFocusable(true);
     mainWindow.setSkipTaskbar(true);
     mainWindow.setResizable(true);
@@ -78,6 +90,16 @@ function createWindow() {
   Menu.setApplicationMenu(null);
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   mainWindow.setMenu(null);
+  mainWindow.on('blur', () => {
+    // 临时输入结束（点击了其他窗口）：自动回到桌面层
+    if (isPinned && transientEdit) {
+      transientEdit = false;
+      try {
+        desktopLayer.attach(mainWindow);
+        mainWindow.setFocusable(false);
+      } catch (e) { console.error('[desktop-layer] re-attach failed:', e.message); }
+    }
+  });
   mainWindow.on('ready-to-show', () => {
     mainWindow.show();
     applyPinState(false);
@@ -126,7 +148,18 @@ ipcMain.handle('change-file', async () => {
 
 ipcMain.handle('get-file-path', () => currentFilePath);
 ipcMain.handle('toggle-pin', () => { isPinned = !isPinned; applyPinState(); return isPinned; });
-ipcMain.handle('close-app', () => app.quit());
+// 锁定模式下点击输入框：临时摘回普通窗口拿键盘焦点，失焦后自动回到桌面层
+ipcMain.handle('begin-transient-edit', () => {
+  if (!isPinned || !mainWindow) return false;
+  try {
+    desktopLayer.detach(mainWindow);
+    mainWindow.setFocusable(true);
+    transientEdit = true;
+    mainWindow.focus();
+    return true;
+  } catch (e) { console.error('[desktop-layer] transient edit failed:', e.message); return false; }
+});
+ipcMain.handle('close-app', () => { expectQuit = true; app.quit(); });
 ipcMain.handle('reload-renderer', () => {
   if (mainWindow) mainWindow.reload();
   return true;
@@ -182,4 +215,20 @@ app.whenReady().then(() => {
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+app.on('window-all-closed', () => {
+  // 挂在桌面树里的窗口会被 explorer 重启连带销毁：非用户主动关闭时自动重建
+  if (process.platform !== 'darwin' && !expectQuit && recreateCount < 3) {
+    recreateCount += 1;
+    setTimeout(() => {
+      try { createWindow(); } catch (e) { console.error('recreate failed:', e.message); }
+    }, 1000);
+    return;
+  }
+  app.quit();
+});
+
+// 桌面层看门狗：explorer 重启等意外后自动恢复
+setInterval(() => {
+  if (!mainWindow || !isPinned || transientEdit) return;
+  try { desktopLayer.ensureAttached(mainWindow); } catch (_) {}
+}, 5000);
