@@ -1,6 +1,22 @@
+<div align="center">
+
+<img src="icon.png" width="72" alt="TodoTree" />
+
 # TodoTree
 
-> 暗金半透明 · 桌面锁死底层 · 4 分区自动化待办管理
+**暗金半透明 · 锁在桌面底层的 Markdown 待办墙**
+
+[![Release](https://img.shields.io/github/v/release/yunyancuo/todotree?style=flat-square&color=dd4f6b)](https://github.com/yunyancuo/todotree/releases)
+[![Platform](https://img.shields.io/badge/Windows-10%2B-24292F?style=flat-square&logo=windows&logoColor=white)](https://github.com/yunyancuo/todotree/releases)
+[![License](https://img.shields.io/badge/License-MIT-24292F?style=flat-square)](LICENSE)
+
+<img src="docs/demo.png" width="400" alt="TodoTree 运行截图" />
+
+**双击即用 · 数据就是一个 Markdown 文件 · 不注册、不上传、离线可用**
+
+</div>
+
+---
 
 一款基于 Electron 的 Windows 桌面待办工具。读取 Markdown 文件（默认 `~/Desktop/TODOTREE.md`），以半透明暗金窗口锁死在桌面底层，提供四分区（目标/待完成/已完成/放弃）任务管理、无限层级子任务、状态循环流转、拖拽排序、DDL 截止日期等功能。
 
@@ -19,13 +35,15 @@
 
 ### 下载安装包（推荐）
 
-从 [Releases](https://github.com/yunyancuo/todotree/releases) 下载最新 `TodoTree-x.x.x.exe`，双击即用，无需安装 Node.js。
+从 [**Releases**](https://github.com/yunyancuo/todotree/releases) 下载最新 `TodoTree-Setup-x.x.x.exe`，双击安装即用，无需 Node.js。
+
+> 数据文件默认在桌面 `TODOTREE.md`，随便什么编辑器都能改，改完 15 秒内自动刷新。
 
 ### 从源码运行
 
 ```bash
 git clone https://github.com/yunyancuo/todotree.git
-cd todotree-app
+cd todotree
 npm install
 npm start
 ```

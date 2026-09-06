@@ -4,5 +4,6 @@ out/
 *.exe
 *.png
 !icon.png
+!docs/demo.png
 .DS_Store
 Thumbs.db
