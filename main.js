@@ -1,4 +1,15 @@
 const { app, BrowserWindow, ipcMain, dialog, Menu, screen, shell } = require('electron');
+
+// 单实例锁：重复启动时直接退出，避免两个窗口叠在桌面层
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+}
+app.on('second-instance', () => {
+  if (mainWindow) {
+    mainWindow.show();
+    mainWindow.focus();
+  }
+});
 const desktopLayer = require('./desktop-layer');
 const path = require('path');
 const fs = require('fs');
