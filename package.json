@@ -1,6 +1,6 @@
 {
   "name": "todotree",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "暗金半透明桌面待办工具 - 4 分区自动化任务管理",
   "main": "main.js",
   "scripts": {
@@ -18,13 +18,14 @@
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
+      "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
       "artifactName": "TodoTree-Setup-${version}.exe"
     },
     "files": [
       "main.js",
       "preload.js",
+      "desktop-layer.js",
       "renderer/**",
       "node_modules/**",
       "package.json"
